@@ -1,0 +1,9 @@
+# Ignore node_modules
+node_modules
+
+# Ignore local development artifacts
+.vscode
+.git
+
+# Ignore built files if you're not serving them from this container
+dist
