@@ -189,7 +189,7 @@ const ContactPage = () => {
         <div className="contact-card">
           <div className="contact-icon phone-icon"></div>
           <h3>Phone</h3>
-          <p>+1</p>
+          <p>+1 4699274741</p>
         </div>
       </div>
       
@@ -244,7 +244,7 @@ const ContactPage = () => {
 const Footer = () => {
   return (
     <footer className="footer">
-      <div className="footer-content">© 2025 Copyright Shshwat Dhayade</div>
+      <div className="footer-content">© 2025 Copyright Shashwat Dhayade</div>
     </footer>
   );
 };
