@@ -418,7 +418,7 @@ const PredictForm = () => {
           <div className="form-fields">
             <div className="form-group">
               <label htmlFor="cas" className="form-label">
-                CAS:
+                CAS (Chemical Abstracts Service - Chemical Identification Number):
               </label>
               <input
                 id="cas"
