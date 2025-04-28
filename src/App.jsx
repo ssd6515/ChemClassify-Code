@@ -517,7 +517,15 @@ const PredictForm = () => {
 
   // Handle file selection
   const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+    const file = e.target.files[0];
+    setFile(file);
+    // parse CAS column
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = reader.result.split("\n").slice(1);     // skip header
+      setCasList(rows.map(r => r.split(",")[0] || ""));
+    };
+    reader.readAsText(file);
     setError("");
     setResult(null);
   };
@@ -615,32 +623,28 @@ const PredictForm = () => {
     link.click();
     document.body.removeChild(link);
   };
-  
+  // Download results
   const handleDownloadResults = () => {
-    if (!result) return;
-    // Build CSV content
-    let csv = "";
-    if (mode === "single") {
-      // adjust field names to match your API's JSON keys
-      csv = "cas,logKOW,prediction\n" +
-        `${cas},${logKOW},${result.prediction}\n`;
-    } else {
-      // assuming batch API returns [{ cas: "...", prediction: "..." }, ...]
-      csv = "cas,prediction\n" +
-        result.map(r => `${r.cas},${r.prediction}`).join("\n");
-    }
-    // trigger download
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
+    if (!result || !casList.length) return;
+  
+    // build CSV: header + one line per CAS/prediction
+    const header = "cas,prediction\n";
+    const rows = casList
+      .slice(0, result.length)               // trim to number of predictions
+      .map((cas, i) => `${cas},${result[i]}`)
+      .join("\n");
+  
+    const csvContent = header + rows;
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+  
     const a = document.createElement("a");
     a.href = url;
-    a.download = mode === "single"
-      ? "single_prediction.csv"
-      : "batch_predictions.csv";
+    a.download = "batch_predictions.csv";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
   };
 
   return (
