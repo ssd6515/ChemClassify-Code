@@ -609,7 +609,7 @@ const PredictForm = () => {
   };
   const handleDownloadSample = () => {
     const link = document.createElement("a");
-    link.href = "C:\Users\Shashwat\Documents\GitHub\toxproject\public\sample_Copy.csv";
+    link.href = "/sample_Copy.csv";
     link.download = "sample.csv";
     document.body.appendChild(link);
     link.click();
