@@ -607,6 +607,41 @@ const PredictForm = () => {
 
     setLoading(false);
   };
+  const handleDownloadSample = () => {
+    const link = document.createElement("a");
+    link.href = "C:\Users\Shashwat\Documents\GitHub\toxproject\public\sample_Copy.csv";
+    link.download = "sample.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  
+  const handleDownloadResults = () => {
+    if (!result) return;
+    // Build CSV content
+    let csv = "";
+    if (mode === "single") {
+      // adjust field names to match your API's JSON keys
+      csv = "cas,logKOW,prediction\n" +
+        `${cas},${logKOW},${result.prediction}\n`;
+    } else {
+      // assuming batch API returns [{ cas: "...", prediction: "..." }, ...]
+      csv = "cas,prediction\n" +
+        result.map(r => `${r.cas},${r.prediction}`).join("\n");
+    }
+    // trigger download
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = mode === "single"
+      ? "single_prediction.csv"
+      : "batch_predictions.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="predict-container">
@@ -635,6 +670,18 @@ const PredictForm = () => {
           <span className="radio-text">Batch (CSV) Prediction</span>
         </label>
       </div>
+
+      {mode === "batch" && (
+        <div style={{ margin: "1em 0" }}>
+          <button
+            type="button"
+            onClick={handleDownloadSample}
+            className="download-sample-button"
+          >
+            Download Sample CSV
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="prediction-form">
         {mode === "single" ? (
@@ -720,6 +767,15 @@ const PredictForm = () => {
           <pre className="results-content">
             {JSON.stringify(result, null, 2)}
           </pre>
+
+          <button
+            type="button"
+            onClick={handleDownloadResults}
+            className="download-results-button"
+          >
+            Download Results as CSV
+          </button>
+
         </div>
       )}
     </div>
