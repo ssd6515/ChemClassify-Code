@@ -394,7 +394,7 @@ const ContactPage = () => {
 const Footer = () => {
   return (
     <footer className="footer">
-      <div className="footer-content">© 2025 Copyright Shshwat Dhayade</div>
+      <div className="footer-content">© 2025 Copyright Shashwat Dhayade</div>
     </footer>
   );
 };
