@@ -203,7 +203,7 @@ const MethodPage = () => {
           </div>
 
           <div className="method-step">
-            <p>4. Search for values which represent logKOW</p>
+            <p>4. a. Search for XLogP3 value which represents logKOW</p>
             <img
               src="/images/img_4.png"
               alt="PubChem logKOW values"
@@ -212,7 +212,7 @@ const MethodPage = () => {
           </div>
 
           <div className="method-step">
-            <p>5. Find the logKOW value</p>
+            <p>4. b. Search for LogP value which represents logKOW</p>
             <img
               src="/images/img_5.png"
               alt="PubChem logKOW value details"
