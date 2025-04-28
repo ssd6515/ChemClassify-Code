@@ -38,6 +38,65 @@ const WebsiteLoader = () => {
   );
 };
 
+// About Model Component
+const AboutModel = () => {
+  return (
+    <div className="about-model-container">
+      <h2 className="section-title">About Our Model</h2>
+      <div className="about-model-content">
+        <div className="model-section">
+          <h3 className="model-subtitle">How It Works</h3>
+          <p>
+            Our system uses RDKit-generated molecular features to predict the bioconcentration 
+            behavior of chemical compounds. RDKit is a powerful cheminformatics toolkit with a 
+            wide range of features for molecular manipulation and analysis. These features 
+            numerically represent chemical structure properties, allowing for accurate 
+            predictions using machine learning models.
+          </p>
+        </div>
+
+        <div className="model-section">
+          <h3 className="model-subtitle">Prediction Classes</h3>
+          <p>
+            Based on the chemical structure, the model classifies compounds into one of the 
+            following categories:
+          </p>
+          <div className="prediction-classes">
+            <div className="prediction-class">
+              <div className="class-indicator orange"></div>
+              <div className="class-details">
+                <h4>Class 1: Inert Chemicals (Moderately Toxic)</h4>
+                <p>Tend to accumulate in lipids</p>
+              </div>
+            </div>
+            <div className="prediction-class">
+              <div className="class-indicator red"></div>
+              <div className="class-details">
+                <h4>Class 2: Specifically Bioconcentrating Chemicals (Highly Toxic)</h4>
+                <p>Actively interact with proteins or biological tissues</p>
+              </div>
+            </div>
+            <div className="prediction-class">
+              <div className="class-indicator green"></div>
+              <div className="class-details">
+                <h4>Class 3: Less Bioconcentrating Chemicals (Least Toxic)</h4>
+                <p>Are typically metabolized or eliminated from the organism</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="model-section">
+          <p className="model-goal">
+            Our goal is to assist in the risk assessment of chemical exposure by providing 
+            reliable predictions of bioconcentration behavior based on chemical features.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
   const [loading, setLoading] = useState(true);
@@ -85,7 +144,18 @@ const App = () => {
           </div>
         ) : (
           <>
-            {currentPage === "home" && <PredictForm />}
+            {currentPage === "home" && (
+              <div className="home-container">
+                <div className="home-content-wrapper">
+                  <div className="home-left-column">
+                    <AboutModel />
+                  </div>
+                  <div className="home-right-column">
+                    <PredictForm />
+                  </div>
+                </div>
+              </div>
+            )}
             {currentPage === "method" && <MethodPage />}
             {currentPage === "contact" && <ContactPage />}
           </>
