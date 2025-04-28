@@ -6,10 +6,10 @@ import "./App.css";
 // Website loading animation component
 const WebsiteLoader = () => {
   const [progress, setProgress] = useState(0);
-  
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setProgress(prev => {
+      setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(timer);
           return 100;
@@ -17,20 +17,22 @@ const WebsiteLoader = () => {
         return prev + Math.floor(Math.random() * 10) + 1;
       });
     }, 200);
-    
+
     return () => clearInterval(timer);
   }, []);
-  
+
   return (
     <div className="website-loader">
       <div className="progress-bar">
-        <div 
-          className="progress-fill" 
+        <div
+          className="progress-fill"
           style={{ width: `${Math.min(progress, 100)}%` }}
         ></div>
       </div>
       <div className="website-loader-spinner"></div>
-      <div className="website-loader-text">Loading Chemical Prediction Tool</div>
+      <div className="website-loader-text">
+        Loading Chemical Prediction Tool
+      </div>
       <div className="loader-status">{Math.min(progress, 100)}% Complete</div>
     </div>
   );
@@ -45,13 +47,13 @@ const App = () => {
     const timer = setTimeout(() => {
       setLoading(false);
     }, 1500);
-    
+
     return () => clearTimeout(timer);
   }, []);
 
   // Page transition loading effect
   const [pageLoading, setPageLoading] = useState(false);
-  
+
   const handlePageChange = (page) => {
     setPageLoading(true);
     setTimeout(() => {
@@ -71,11 +73,20 @@ const App = () => {
         {pageLoading ? (
           <div className="page-loader">
             <div className="loading-spinner"></div>
-            <div className="loading-text">Loading {currentPage === "home" ? "Home" : "Contact"} Page...</div>
+            <div className="loading-text">
+              Loading{" "}
+              {currentPage === "home"
+                ? "Home"
+                : currentPage === "method"
+                ? "Method"
+                : "Contact"}{" "}
+              Page...
+            </div>
           </div>
         ) : (
           <>
             {currentPage === "home" && <PredictForm />}
+            {currentPage === "method" && <MethodPage />}
             {currentPage === "contact" && <ContactPage />}
           </>
         )}
@@ -88,10 +99,10 @@ const App = () => {
 const Header = ({ setCurrentPage, currentPage }) => {
   return (
     <header className="header">
-      <div 
-        className="header-title" 
+      <div
+        className="header-title"
         onClick={() => setCurrentPage("home")}
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: "pointer" }}
       >
         Chemical Prediction Tool
       </div>
@@ -108,6 +119,16 @@ const Header = ({ setCurrentPage, currentPage }) => {
         </a>
         <a
           href="#"
+          className={`nav-link ${currentPage === "method" ? "active" : ""}`}
+          onClick={(e) => {
+            e.preventDefault();
+            setCurrentPage("method");
+          }}
+        >
+          Method
+        </a>
+        <a
+          href="#"
           className={`nav-link ${currentPage === "contact" ? "active" : ""}`}
           onClick={(e) => {
             e.preventDefault();
@@ -121,51 +142,174 @@ const Header = ({ setCurrentPage, currentPage }) => {
   );
 };
 
+const MethodPage = () => {
+  return (
+    <div className="method-container" style={{ width: "100%" }}>
+      <h2 className="section-title">How to Fetch logKOW</h2>
+
+      <div className="kow-formula">
+        <h3>KOW Formula:</h3>
+        <img
+          src="/images/img_0.jpeg"
+          alt="KOW Formula: Concentration of chemical in octanol / Concentration of chemical in water"
+          className="formula-image"
+        />
+      </div>
+
+      <div className="method-section">
+        <h3>Method 1: PubChem</h3>
+        <p className="method-description">
+          PubChem is a database of chemical molecules and their activities
+          against biological assays. It is maintained by the National Center for
+          Biotechnology Information (NCBI).
+        </p>
+        <p className="method-link">
+          Link:{" "}
+          <a
+            href="https://pubchem.ncbi.nlm.nih.gov/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            https://pubchem.ncbi.nlm.nih.gov/
+          </a>
+        </p>
+
+        <div className="method-steps">
+          <div className="method-step">
+            <p>1. Enter desired chemical name</p>
+            <img
+              src="/images/img_1.png"
+              alt="PubChem search interface"
+              className="method-image"
+            />
+          </div>
+
+          <div className="method-step">
+            <p>2. Click on the desired chemical</p>
+            <img
+              src="/images/img_2.png"
+              alt="PubChem search results"
+              className="method-image"
+            />
+          </div>
+
+          <div className="method-step">
+            <p>3. Navigate to the chemical information page</p>
+            <img
+              src="/images/img_3.png"
+              alt="PubChem chemical information page"
+              className="method-image"
+            />
+          </div>
+
+          <div className="method-step">
+            <p>4. Search for values which represent logKOW</p>
+            <img
+              src="/images/img_4.png"
+              alt="PubChem logKOW values"
+              className="method-image"
+            />
+          </div>
+
+          <div className="method-step">
+            <p>5. Find the logKOW value</p>
+            <img
+              src="/images/img_5.png"
+              alt="PubChem logKOW value details"
+              className="method-image"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="method-section">
+        <h3>Method 2: Dragon Software</h3>
+        <p className="method-description">
+          Dragon Software is a tool for calculating molecular descriptors used
+          in QSAR analysis.
+        </p>
+        <p className="method-link">
+          Link:{" "}
+          <a
+            href="https://chm.kode-solutions.net/pf/knime-extension-for-dragon-7-0/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            https://chm.kode-solutions.net/pf/knime-extension-for-dragon-7-0/
+          </a>
+        </p>
+
+        <div className="method-steps">
+          <div className="method-step">
+            <p>Dragon Software Interface</p>
+            <img
+              src="/images/img_6.png"
+              alt="Dragon Software Interface"
+              className="method-image"
+            />
+          </div>
+        </div>
+
+        <div className="method-note">
+          <p>
+            <strong>NOTE:</strong> Registration is required to use Dragon 7.0
+            software
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ContactPage = () => {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    message: ''
+    name: "",
+    email: "",
+    message: "",
   });
   const [formStatus, setFormStatus] = useState({
     sending: false,
     sent: false,
-    error: null
+    error: null,
   });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setFormStatus({ sending: true, sent: false, error: null });
-    
+
     // In a real application, you would use a service like EmailJS, Formspree, or your own backend
     // Here we'll simulate sending an email with a timeout
     setTimeout(() => {
       try {
         // This is where you would integrate with an email service
         // For demonstration, we're just simulating success
-        console.log('Email would be sent to: ssd6515@mavs.uta.edu');
-        console.log('Form data:', formData);
-        
+        console.log("Email would be sent to: ssd6515@mavs.uta.edu");
+        console.log("Form data:", formData);
+
         // Simulate success
         setFormStatus({ sending: false, sent: true, error: null });
-        
+
         // Reset form after successful submission
-        setFormData({ name: '', email: '', message: '' });
-        
+        setFormData({ name: "", email: "", message: "" });
+
         // Reset success message after 5 seconds
         setTimeout(() => {
-          setFormStatus(prev => ({ ...prev, sent: false }));
+          setFormStatus((prev) => ({ ...prev, sent: false }));
         }, 5000);
       } catch (error) {
-        setFormStatus({ sending: false, sent: false, error: 'Failed to send message. Please try again.' });
+        setFormStatus({
+          sending: false,
+          sent: false,
+          error: "Failed to send message. Please try again.",
+        });
       }
     }, 1500);
   };
@@ -176,64 +320,70 @@ const ContactPage = () => {
       <div className="contact-cards">
         <div className="contact-card">
           <div className="contact-icon person-icon"></div>
-          <h3>Shshwat Dhayade</h3>
+          <h3>Shashwat Dhayade</h3>
           <p>Lead Developer</p>
         </div>
-        
+
         <div className="contact-card">
           <div className="contact-icon email-icon"></div>
           <h3>Email</h3>
-          <p><a href="mailto:ssd6515@mavs.uta.edu">ssd6515@mavs.uta.edu</a></p>
+          <p>
+            <a href="mailto:ssd6515@mavs.uta.edu">ssd6515@mavs.uta.edu</a>
+          </p>
         </div>
-        
+
         <div className="contact-card">
           <div className="contact-icon phone-icon"></div>
           <h3>Phone</h3>
-          <p>+1</p>
+          <p>+1(469)927-4741</p>
         </div>
       </div>
-      
+
       <div className="contact-message">
         <h3>Send us a message</h3>
         <form className="contact-form" onSubmit={handleSubmit}>
           <div className="form-row">
-            <input 
-              type="text" 
+            <input
+              type="text"
               name="name"
               value={formData.name}
               onChange={handleInputChange}
-              placeholder="Your Name" 
-              className="contact-input" 
-              required 
+              placeholder="Your Name"
+              className="contact-input"
+              required
             />
-            <input 
-              type="email" 
+            <input
+              type="email"
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              placeholder="Your Email" 
-              className="contact-input" 
-              required 
+              placeholder="Your Email"
+              className="contact-input"
+              required
             />
           </div>
-          <textarea 
+          <textarea
             name="message"
             value={formData.message}
             onChange={handleInputChange}
-            placeholder="Your Message" 
+            placeholder="Your Message"
             className="contact-textarea"
             required
           ></textarea>
-          
-          {formStatus.error && <div className="form-error">{formStatus.error}</div>}
-          {formStatus.sent && <div className="form-success">Message sent successfully!</div>}
-          
-          <button 
-            type="submit" 
+
+          {formStatus.error && (
+            <div className="form-error">{formStatus.error}</div>
+          )}
+          {formStatus.sent && (
+            <div className="form-success">Message sent successfully!</div>
+          )}
+
+          <button
+            type="submit"
             className="contact-submit"
             disabled={formStatus.sending}
           >
-            {formStatus.sending ? 'Sending...' : 'Send Message'}
+            {formStatus.sending ? "Sending..." : "Send Message"}
           </button>
         </form>
       </div>
@@ -274,7 +424,7 @@ const PredictForm = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  
+
   // Reference for results container to scroll to
   const resultsRef = useRef(null);
 
@@ -316,7 +466,10 @@ const PredictForm = () => {
     if (result && resultsRef.current) {
       // Scroll to results with a slight delay to ensure rendering is complete
       setTimeout(() => {
-        resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        resultsRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       }, 300);
     }
   }, [result]);
@@ -364,7 +517,7 @@ const PredictForm = () => {
       }
 
       // Add a small delay to show the loading animation
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       // 4) hit your prediction endpoint
       const apiRes = await fetch(mode === "single" ? DIRECT_API : BATCH_API, {
@@ -418,7 +571,8 @@ const PredictForm = () => {
           <div className="form-fields">
             <div className="form-group">
               <label htmlFor="cas" className="form-label">
-                CAS:
+                CAS (Chemical Abstracts Service - Chemical Identification
+                Number):
               </label>
               <input
                 id="cas"
@@ -479,10 +633,14 @@ const PredictForm = () => {
       </form>
 
       {error && <p className="error-message">{error}</p>}
-      
+
       {loading && (
-        <LoadingAnimation 
-          message={mode === "single" ? "Analyzing chemical data..." : "Processing CSV file..."} 
+        <LoadingAnimation
+          message={
+            mode === "single"
+              ? "Analyzing chemical data..."
+              : "Processing CSV file..."
+          }
         />
       )}
 
