@@ -195,7 +195,7 @@ const Header = ({ setCurrentPage, currentPage }) => {
             setCurrentPage("method");
           }}
         >
-          Method
+          logKOW
         </a>
         <a
           href="#"
