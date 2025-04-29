@@ -624,28 +624,53 @@ const PredictForm = () => {
     document.body.removeChild(link);
   };
   // Download results
+  // Download results as CSV including all RDKit features
   const handleDownloadResults = () => {
-    if (!result || !casList.length) return;
-  
-    // build CSV: header + one line per CAS/prediction
-    const header = "cas,prediction\n";
-    const rows = casList
-      .slice(0, result.length)               // trim to number of predictions
-      .map((cas, i) => `${cas},${result[i]}`)
-      .join("\n");
-  
-    const csvContent = header + rows;
+    if (!result) return;
+
+    // Determine feature keys (drop CAS & logKOW since they're our first two columns)
+    const sampleDataset = mode === "single"
+      ? result.dataset
+      : result.results[0].dataset;
+    const featureKeys = Object.keys(sampleDataset)
+      .filter((k) => k !== "CAS" && k !== "logKOW");
+
+    // Build CSV header
+    const header = ["cas", "logKOW", "prediction", ...featureKeys].join(",") + "\n";
+
+    // Build CSV rows
+    let rows;
+    if (mode === "single") {
+      const {
+        dataset: { CAS, logKOW, ...allFeatures },
+        prediction,
+      } = result;
+      const featureValues = featureKeys.map((k) => allFeatures[k]);
+      rows = [[CAS, logKOW, prediction[0], ...featureValues]];
+    } else {
+      rows = result.results.map(({ CAS, logKOW, prediction, dataset }) => {
+        const featureValues = featureKeys.map((k) => dataset[k]);
+        return [CAS, logKOW, prediction[0], ...featureValues];
+      });
+    }
+
+    const csvContent =
+      header +
+      rows.map((r) => r.join(",")).join("\n") +
+      "\n";
+
+    // Trigger download
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-  
     const a = document.createElement("a");
     a.href = url;
-    a.download = "batch_predictions.csv";
+    a.download = mode === "single" ? "prediction_full.csv" : "batch_predictions_full.csv";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="predict-container">
