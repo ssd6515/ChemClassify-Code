@@ -617,7 +617,7 @@ const PredictForm = () => {
   };
   const handleDownloadSample = () => {
     const link = document.createElement("a");
-    link.href = "/sample_Copy.csv";
+    link.href = "/sample.csv";
     link.download = "sample.csv";
     document.body.appendChild(link);
     link.click();
@@ -748,7 +748,7 @@ const PredictForm = () => {
         ) : (
           <div className="form-group">
             <label htmlFor="csvUpload" className="form-label">
-              Upload CSV:
+              Upload CSV (Max 30 Chemicals):
             </label>
             <input
               id="csvUpload"
