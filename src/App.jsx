@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./App.css";
+import emailjs from '@emailjs/browser';
 
 // Website loading animation component
 const WebsiteLoader = () => {
@@ -351,37 +352,45 @@ const ContactPage = () => {
     }));
   };
 
+  // Put these in a .env file for security in production
+  const SERVICE_ID = 'service_1vv6vcs';
+  const TEMPLATE_ID = 'template_sf2ulje';
+  const PUBLIC_KEY = 'RpOoe-FYhaf3ykQvo';
+
   const handleSubmit = (e) => {
     e.preventDefault();
     setFormStatus({ sending: true, sent: false, error: null });
 
-    // In a real application, you would use a service like EmailJS, Formspree, or your own backend
-    // Here we'll simulate sending an email with a timeout
-    setTimeout(() => {
-      try {
-        // This is where you would integrate with an email service
-        // For demonstration, we're just simulating success
-        console.log("Email would be sent to: ssd6515@mavs.uta.edu");
-        console.log("Form data:", formData);
+    emailjs
+      .send(
+        SERVICE_ID,
+        TEMPLATE_ID,
+        {
+          name: formData.name,
+          email: formData.email,
+          message: formData.message,
+        },
+        PUBLIC_KEY
+      )
+      .then(
+        (response) => {
+          console.log('SUCCESS!', response.status, response.text);
+          setFormStatus({ sending: false, sent: true, error: null });
+          setFormData({ name: "", email: "", message: "" });
 
-        // Simulate success
-        setFormStatus({ sending: false, sent: true, error: null });
-
-        // Reset form after successful submission
-        setFormData({ name: "", email: "", message: "" });
-
-        // Reset success message after 5 seconds
-        setTimeout(() => {
-          setFormStatus((prev) => ({ ...prev, sent: false }));
-        }, 5000);
-      } catch (error) {
-        setFormStatus({
-          sending: false,
-          sent: false,
-          error: "Failed to send message. Please try again.",
-        });
-      }
-    }, 1500);
+          setTimeout(() => {
+            setFormStatus((prev) => ({ ...prev, sent: false }));
+          }, 5000);
+        },
+        (error) => {
+          console.error('FAILED...', error);
+          setFormStatus({
+            sending: false,
+            sent: false,
+            error: 'Failed to send message. Please try again.',
+          });
+        }
+      );
   };
 
   return (
