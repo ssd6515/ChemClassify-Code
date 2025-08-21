@@ -5,7 +5,11 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.ML.Descriptors import MoleculeDescriptors
-import pubchempy as pcp
+import json
+import re
+import time
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 import csv
 import io
 import boto3
@@ -48,18 +52,122 @@ def compute_logBCF(logKOW: float) -> float:
     else:
         return 2.68
 
-def get_smiles_from_cas(cas_id: str) -> str:
-    """
-    Retrieves the SMILES string for a given CAS number using PubChem.
-    """
-    try:
-        compounds = pcp.get_compounds(cas_id, 'name')
-        if compounds:
-            return compounds[0].canonical_smiles
-        else:
-            return None
-    except Exception:
+PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+CACTUS  = "https://cactus.nci.nih.gov/chemical/structure"
+
+_CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
+
+def _normalize_cas(cas: str) -> str:
+    s = (cas or "").strip()
+    # normalize non-ASCII hyphens
+    return (s.replace("\u2010", "-")
+             .replace("\u2011", "-")
+             .replace("\u2012", "-")
+             .replace("\u2013", "-")
+             .replace("\u2212", "-"))
+
+def _http_get(url: str, timeout: int = 6) -> bytes:
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+def _http_get_json(url: str, timeout: int = 6) -> dict:
+    raw = _http_get(url, timeout=timeout)
+    return json.loads(raw.decode("utf-8"))
+
+def _http_get_text(url: str, timeout: int = 6) -> str:
+    raw = _http_get(url, timeout=timeout)
+    return raw.decode("utf-8").strip()
+
+def _retry(fn, tries: int = 2, delay: float = 0.4):
+    last = None
+    for _ in range(tries):
+        try:
+            return fn()
+        except (HTTPError, URLError) as e:
+            last = e
+            time.sleep(delay)
+    if last:
+        raise last
+
+# --- CID/SID resolution using CAS as a Registry Number (RN) ---
+
+def _pubchem_cids_by_rn(cas_rn: str):
+    # Precise: CAS as a registry number (RN), not a free-text "name"
+    url = f"{PUBCHEM}/compound/xref/RN/{cas_rn}/cids/JSON"
+    data = _retry(lambda: _http_get_json(url))
+    # If a Fault is returned, no IdentifierList will be present
+    ids = data.get("IdentifierList", {}).get("CID", [])
+    return ids
+
+def _pubchem_cid_via_sid_rn(cas_rn: str):
+    # Some records exist only as Substances. Map SID -> CID.
+    url_sids = f"{PUBCHEM}/substance/xref/RN/{cas_rn}/sids/JSON"
+    sid_data = _retry(lambda: _http_get_json(url_sids))
+    sids = sid_data.get("IdentifierList", {}).get("SID", [])
+    if not sids:
         return None
+    sid = sids[0]
+
+    url_cids = f"{PUBCHEM}/substance/sid/{sid}/cids/JSON"
+    cid_data = _retry(lambda: _http_get_json(url_cids))
+    info = cid_data.get("InformationList", {}).get("Information", [])
+    if info and "CID" in info[0]:
+        cids = info[0]["CID"]
+    else:
+        cids = cid_data.get("IdentifierList", {}).get("CID", [])
+    return cids[0] if cids else None
+
+def _pubchem_smiles_from_cid(cid: int) -> str | None:
+    # Ask for both Canonical and Isomeric so we have options
+    url = f"{PUBCHEM}/compound/cid/{cid}/property/CanonicalSMILES,IsomericSMILES/JSON"
+    data = _retry(lambda: _http_get_json(url))
+    # If the response is a Fault, there will be no PropertyTable
+    props = data.get("PropertyTable", {}).get("Properties", [])
+    if not props:
+        return None
+    entry = props[0]
+    # Prefer canonical; fall back to isomeric if needed
+    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
+
+def _cactus_smiles(identifier: str) -> str | None:
+    # NIH Cactus returns plain text; "Not Found" in body if missing
+    url = f"{CACTUS}/{identifier}/smiles"
+    try:
+        txt = _retry(lambda: _http_get_text(url))
+        return None if (not txt or "Not Found" in txt) else txt
+    except (HTTPError, URLError):
+        return None
+
+def get_smiles_from_cas(cas_number: str) -> str | None:
+    """
+    Resolve SMILES from a CAS number without PubChemPy.
+    Order: PubChem by RN -> PubChem SID->CID -> NIH Cactus.
+    Returns None if not found anywhere.
+    Raises HTTPError/URLError only if both resolvers are unreachable.
+    """
+    cas = _normalize_cas(cas_number)
+    if not _CAS_RE.match(cas):
+        raise ValueError(f"Invalid CAS format: {cas!r}")
+
+    # 1) PubChem: CAS RN -> CID(s)
+    try:
+        cids = _pubchem_cids_by_rn(cas)
+        cid = cids[0] if cids else _pubchem_cid_via_sid_rn(cas)
+        if cid:
+            smi = _pubchem_smiles_from_cid(cid)
+            if smi:
+                return smi
+    except (HTTPError, URLError):
+        # If PubChem is unreachable, try Cactus before re-raising
+        smi = _cactus_smiles(cas)
+        if smi:
+            return smi
+        raise
+
+    # 2) Fallback to Cactus even if PubChem was reachable but had no match
+    return _cactus_smiles(cas)
+
 
 def qsar_ready_smiles(smiles: str) -> str:
     """
