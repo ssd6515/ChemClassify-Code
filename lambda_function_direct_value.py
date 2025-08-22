@@ -5,6 +5,9 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.ML.Descriptors import MoleculeDescriptors
+import sklearn
+import sklearn.ensemble
+import sklearn.tree
 import json
 import re
 import time

@@ -8,6 +8,9 @@ from rdkit.ML.Descriptors import MoleculeDescriptors
 import json
 import re
 import time
+import sklearn
+import sklearn.ensemble
+import sklearn.tree
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
 import csv
@@ -28,16 +31,14 @@ s3_client     = boto3.client('s3', region_name=REGION)
 # global placeholder for your model
 MODEL = None
 
-def get_model():
-    global MODEL
-    if MODEL is None:
-        # only import torch (and load your model) when you actually need it
-        model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_now.pt')
-        try:
-            MODEL = torch.load(model_path, map_location=torch.device("cpu"), weights_only=False)
-            return MODEL
-        except Exception as e:
-            return {"error": f"Error loading model: {str(e)}"}
+# --- Global model load ---
+MODEL_LOADING_ERROR = None
+try:
+    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_now.pt')
+    model = torch.load(model_path, map_location="cpu")
+except Exception as e:
+    model = None
+    MODEL_LOADING_ERROR = str(e)
 
 def compute_logBCF(logKOW: float) -> float:
     """
@@ -66,16 +67,16 @@ def _normalize_cas(cas: str) -> str:
              .replace("\u2013", "-")
              .replace("\u2212", "-"))
 
-def _http_get(url: str, timeout: int = 6) -> bytes:
+def _http_get(url: str, timeout: int = 500) -> bytes:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=timeout) as r:
         return r.read()
 
-def _http_get_json(url: str, timeout: int = 6) -> dict:
+def _http_get_json(url: str, timeout: int = 500) -> dict:
     raw = _http_get(url, timeout=timeout)
     return json.loads(raw.decode("utf-8"))
 
-def _http_get_text(url: str, timeout: int = 6) -> str:
+def _http_get_text(url: str, timeout: int = 500) -> str:
     raw = _http_get(url, timeout=timeout)
     return raw.decode("utf-8").strip()
 
@@ -276,17 +277,18 @@ def prepare_numeric_features(combined: dict) -> np.ndarray:
 
 
 def lambda_handler(event, context):
-    model = get_model()
-    if isinstance(model, dict) and "error" in model:
-        MODEL_LOADING_ERROR = model["error"]
-    else:
-        MODEL_LOADING_ERROR = None
-    # 0) Early model‑load error
-    if MODEL_LOADING_ERROR:
+    # 0) Early model-load error
+    if MODEL_LOADING_ERROR or model is None:
         return {
             "statusCode": 500,
             "headers": CORS_HEADERS,
             "body": json.dumps({"error": f"Model loading error: {MODEL_LOADING_ERROR}"})
+        }
+    if not hasattr(model, "predict"):
+        return {
+            "statusCode": 500,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": "Loaded object has no .predict() method"})
         }
 
     # 1) Parse input

@@ -613,8 +613,10 @@ const PredictForm = () => {
         body: JSON.stringify(payload),
       });
       if (!apiRes.ok) {
-        const err = await apiRes.json();
-        throw new Error(err.error || "Prediction failed");
+        const raw = await apiRes.text();
+        let data; try { data = JSON.parse(raw); } catch { data = {}; }
+        const msg = data.error || data.message || raw || "Prediction failed";
+        throw new Error(msg);
       }
 
       setResult(await apiRes.json());
