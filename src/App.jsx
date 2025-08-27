@@ -759,7 +759,7 @@ const PredictForm = () => {
         ) : (
           <div className="form-group">
             <label htmlFor="csvUpload" className="form-label">
-              Upload CSV (Max 30 Chemicals):
+              Upload CSV (Max 10 Chemicals):
             </label>
             <input
               id="csvUpload"
