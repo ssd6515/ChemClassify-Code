@@ -247,7 +247,7 @@ const MethodPage = () => {
 
         <div className="method-steps">
           <div className="method-step">
-            <p>1. Enter desired chemical name</p>
+            <p>1. Enter desired chemical name or CAS</p>
             <img
               src="/images/img_1.png"
               alt="PubChem search interface"
