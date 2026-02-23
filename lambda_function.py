@@ -34,7 +34,7 @@ MODEL = None
 # --- Global model load ---
 MODEL_LOADING_ERROR = None
 try:
-    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_now.pt')
+    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_panelb.pt')
     model = torch.load(model_path, map_location="cpu")
 except Exception as e:
     model = None
@@ -190,7 +190,7 @@ def generate_rdkit_features(smiles: str) -> dict:
             desc_dict[key] = 0.0
     return desc_dict
 
-def combine_features(cas_id: str, logKOW: float) -> dict:
+def combine_features(cas_id: str) -> dict:
     """
     Combines features for a given chemical: retrieves SMILES, converts it to QSAR-ready form,
     computes logBCF, and adds RDKit descriptors.

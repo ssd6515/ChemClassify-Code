@@ -26,7 +26,7 @@ def load_model():
     """
     Loads the pre-trained Gradient Boosting model from best_gbdt_model.pt.
     """
-    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_now.pt')
+    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_panelb.pt')
     try:
         model = torch.load(model_path, map_location=torch.device("cpu"), weights_only=False)
         return model
@@ -184,7 +184,7 @@ def generate_rdkit_features(smiles: str) -> dict:
             desc_dict[key] = 0.0
     return desc_dict
 
-def combine_features(cas_id: str, logKOW: float) -> dict:
+def combine_features(cas_id: str) -> dict:
     """
     Combines features for a given chemical: retrieves SMILES, converts it to QSAR-ready form,
     computes logBCF, and adds RDKit descriptors.
@@ -196,7 +196,6 @@ def combine_features(cas_id: str, logKOW: float) -> dict:
     rdkit_feats = generate_rdkit_features(qsar_smiles)
     combined = {
         "CAS": cas_id,
-        "logKOW": logKOW,
         "SMILES": qsar_smiles
     }
     combined.update(rdkit_feats)

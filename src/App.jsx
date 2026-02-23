@@ -60,7 +60,7 @@ const AboutModel = () => {
           <h3 className="model-subtitle">Prediction Classes</h3>
           <p>
             Based on the chemical structure, the model classifies compounds into one of the 
-            following categories:
+            following categories with 0.691 ± 0.033 accuracy:
           </p>
           <div className="prediction-classes">
             <div className="prediction-class">
@@ -441,10 +441,10 @@ const PredictForm = () => {
       let payload;
 
       if (mode === "single") {
-        if (!cas || !logKOW) {
-          throw new Error("Please provide both CAS and logKOW values");
+        if (!cas) {
+          throw new Error("Please provide a CAS value");
         }
-        payload = { cas, logKOW };
+        payload = { cas };
       } else {
         if (!file) {
           throw new Error("Please select a CSV file first");
