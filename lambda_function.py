@@ -40,19 +40,6 @@ except Exception as e:
     model = None
     MODEL_LOADING_ERROR = str(e)
 
-def compute_logBCF(logKOW: float) -> float:
-    """
-    Computes logBCF from logKOW using a piecewise formula.
-    """
-    if logKOW < 1:
-        return 0.15
-    elif logKOW <= 6:
-        return 0.85 * logKOW - 0.70
-    elif logKOW < 10:
-        return -0.20 * (logKOW ** 2) + 2.74 * logKOW - 4.72
-    else:
-        return 2.68
-
 PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 CACTUS  = "https://cactus.nci.nih.gov/chemical/structure"
 
@@ -212,12 +199,9 @@ def combine_features(cas_id: str, logKOW: float) -> dict:
     if not smiles:
         raise ValueError(f"No SMILES found for CAS: {cas_id}")
     qsar_smiles = qsar_ready_smiles(smiles)
-    logBCF_value = compute_logBCF(logKOW)
     rdkit_feats = generate_rdkit_features(qsar_smiles)
     combined = {
         "CAS": cas_id,
-        "logBCF": logBCF_value,
-        "logKOW": logKOW,
         "SMILES": qsar_smiles
     }
     combined.update(rdkit_feats)
@@ -228,7 +212,7 @@ def prepare_numeric_features(combined: dict) -> np.ndarray:
     Extracts numeric features in the specific order expected by the model.
     """
     feature_order = [
-        "logBCF", "logKOW", "MaxAbsEStateIndex", "MaxEStateIndex", "MinAbsEStateIndex", "MinEStateIndex",
+        "MaxAbsEStateIndex", "MaxEStateIndex", "MinAbsEStateIndex", "MinEStateIndex",
         "qed", "SPS", "MolWt", "HeavyAtomMolWt", "ExactMolWt", "NumValenceElectrons", "NumRadicalElectrons",
         "MaxPartialCharge", "MinPartialCharge", "MaxAbsPartialCharge", "MinAbsPartialCharge",
         "FpDensityMorgan1", "FpDensityMorgan2", "FpDensityMorgan3", "BCUT2D_MWHI", "BCUT2D_MWLOW",
@@ -316,7 +300,7 @@ def lambda_handler(event, context):
         }
 
     # 3) Validate headers & missing values
-    required = {"CAS", "logKOW"}
+    required = {"CAS"}
     if not reader.fieldnames or not required.issubset(reader.fieldnames):
         return {
             "statusCode": 400,
@@ -350,27 +334,16 @@ def lambda_handler(event, context):
     results = []
     for row in rows:
         cas_id = row["CAS"].strip()
-        try:
-            logKOW_val = float(row["logKOW"])
-        except:
-            return {
-                "statusCode": 400,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({
-                    "error": f"Invalid logKOW '{row['logKOW']}' for CAS {cas_id}"
-                })
-            }
 
         try:
-            combined = combine_features(cas_id, logKOW_val)
+            combined = combine_features(cas_id)
             features = prepare_numeric_features(combined)
-            tensor   = torch.tensor(features, dtype=torch.float)
-            pred     = model.predict(tensor)
+            #tensor   = torch.tensor(features, dtype=torch.float)
+            pred     = model.predict(features)
             # If sklearn array:
             output_pred = pred.tolist() if hasattr(pred, "tolist") else pred
             results.append({
                 "CAS": cas_id,
-                "logKOW": logKOW_val,
                 "dataset": combined,
                 "prediction": output_pred
             })

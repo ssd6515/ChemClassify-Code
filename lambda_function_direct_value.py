@@ -33,20 +33,6 @@ def load_model():
     except Exception as e:
         return {"error": f"Error loading model: {str(e)}"}
 
-def compute_logBCF(logKOW: float) -> float:
-    """
-    Computes logBCF from logKOW using a piecewise formula.
-    """
-    if logKOW < 1:
-        return 0.15
-    elif logKOW <= 6:
-        return 0.85 * logKOW - 0.70
-    elif logKOW < 10:
-        return -0.20 * (logKOW ** 2) + 2.74 * logKOW - 4.72
-    else:
-        return 2.68
-
-
 
 PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 CACTUS  = "https://cactus.nci.nih.gov/chemical/structure"
@@ -207,11 +193,9 @@ def combine_features(cas_id: str, logKOW: float) -> dict:
     if not smiles:
         raise ValueError(f"No SMILES found for CAS: {cas_id}")
     qsar_smiles = qsar_ready_smiles(smiles)
-    logBCF_value = compute_logBCF(logKOW)
     rdkit_feats = generate_rdkit_features(qsar_smiles)
     combined = {
         "CAS": cas_id,
-        "logBCF": logBCF_value,
         "logKOW": logKOW,
         "SMILES": qsar_smiles
     }
@@ -223,7 +207,7 @@ def prepare_numeric_features(combined: dict) -> np.ndarray:
     Extracts numeric features in the specific order expected by the model.
     """
     feature_order = [
-        "logBCF", "logKOW", "MaxAbsEStateIndex", "MaxEStateIndex", "MinAbsEStateIndex", "MinEStateIndex",
+        "MaxAbsEStateIndex", "MaxEStateIndex", "MinAbsEStateIndex", "MinEStateIndex",
         "qed", "SPS", "MolWt", "HeavyAtomMolWt", "ExactMolWt", "NumValenceElectrons", "NumRadicalElectrons",
         "MaxPartialCharge", "MinPartialCharge", "MaxAbsPartialCharge", "MinAbsPartialCharge",
         "FpDensityMorgan1", "FpDensityMorgan2", "FpDensityMorgan3", "BCUT2D_MWHI", "BCUT2D_MWLOW",
@@ -289,7 +273,6 @@ def lambda_handler(event, context):
         payload = event.get("body")
         data = json.loads(payload) if isinstance(payload, str) else event
         cas = data["cas"]
-        logKOW = float(data["logKOW"])
     except Exception as e:
         return {
             "statusCode": 400,
@@ -299,7 +282,7 @@ def lambda_handler(event, context):
 
     # 3) Combine features
     try:
-        combined = combine_features(cas, logKOW)
+        combined = combine_features(cas)
     except Exception as e:
         return {
             "statusCode": 400,
@@ -310,8 +293,8 @@ def lambda_handler(event, context):
     # 4) Predict
     try:
         features = prepare_numeric_features(combined)
-        tensor = torch.tensor(features, dtype=torch.float)
-        prediction = model.predict(tensor)
+        #tensor = torch.tensor(features, dtype=torch.float)
+        prediction = model.predict(features)
     except Exception as e:
         return {
             "statusCode": 500,

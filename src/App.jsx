@@ -137,9 +137,7 @@ const App = () => {
               Loading{" "}
               {currentPage === "home"
                 ? "Home"
-                : currentPage === "method"
-                ? "Method"
-                : "Contact"}{" "}
+                : "Contact"}
               Page...
             </div>
           </div>
@@ -157,7 +155,6 @@ const App = () => {
                 </div>
               </div>
             )}
-            {currentPage === "method" && <MethodPage />}
             {currentPage === "contact" && <ContactPage />}
           </>
         )}
@@ -188,16 +185,7 @@ const Header = ({ setCurrentPage, currentPage }) => {
         >
           Home
         </a>
-        <a
-          href="#"
-          className={`nav-link ${currentPage === "method" ? "active" : ""}`}
-          onClick={(e) => {
-            e.preventDefault();
-            setCurrentPage("method");
-          }}
-        >
-          logKOW
-        </a>
+
         <a
           href="#"
           className={`nav-link ${currentPage === "contact" ? "active" : ""}`}
@@ -210,125 +198,6 @@ const Header = ({ setCurrentPage, currentPage }) => {
         </a>
       </nav>
     </header>
-  );
-};
-
-const MethodPage = () => {
-  return (
-    <div className="method-container" style={{ width: "100%" }}>
-      <h2 className="section-title">How to Fetch logKOW</h2>
-
-      <div className="kow-formula">
-        <h3>KOW Formula:</h3>
-        <img
-          src="/images/img_0.jpeg"
-          alt="KOW Formula: Concentration of chemical in octanol / Concentration of chemical in water"
-          className="formula-image"
-        />
-      </div>
-
-      <div className="method-section">
-        <h3>Method 1: PubChem</h3>
-        <p className="method-description">
-          PubChem is a database of chemical molecules and their activities
-          against biological assays. It is maintained by the National Center for
-          Biotechnology Information (NCBI).
-        </p>
-        <p className="method-link">
-          Link:{" "}
-          <a
-            href="https://pubchem.ncbi.nlm.nih.gov/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://pubchem.ncbi.nlm.nih.gov/
-          </a>
-        </p>
-
-        <div className="method-steps">
-          <div className="method-step">
-            <p>1. Enter desired chemical name or CAS</p>
-            <img
-              src="/images/img_1.png"
-              alt="PubChem search interface"
-              className="method-image"
-            />
-          </div>
-
-          <div className="method-step">
-            <p>2. Click on the desired chemical</p>
-            <img
-              src="/images/img_2.png"
-              alt="PubChem search results"
-              className="method-image"
-            />
-          </div>
-
-          <div className="method-step">
-            <p>3. Navigate to the chemical information page</p>
-            <img
-              src="/images/img_3.png"
-              alt="PubChem chemical information page"
-              className="method-image"
-            />
-          </div>
-
-          <div className="method-step">
-            <p>4. a. Search for XLogP3 value which represents logKOW</p>
-            <img
-              src="/images/img_4.png"
-              alt="PubChem logKOW values"
-              className="method-image"
-            />
-          </div>
-
-          <div className="method-step">
-            <p>4. b. Search for LogP value which represents logKOW</p>
-            <img
-              src="/images/img_5.png"
-              alt="PubChem logKOW value details"
-              className="method-image"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="method-section">
-        <h3>Method 2: Dragon Software</h3>
-        <p className="method-description">
-          Dragon Software is a tool for calculating molecular descriptors used
-          in QSAR analysis.
-        </p>
-        <p className="method-link">
-          Link:{" "}
-          <a
-            href="https://chm.kode-solutions.net/pf/knime-extension-for-dragon-7-0/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://chm.kode-solutions.net/pf/knime-extension-for-dragon-7-0/
-          </a>
-        </p>
-
-        <div className="method-steps">
-          <div className="method-step">
-            <p>Dragon Software Interface</p>
-            <img
-              src="/images/img_6.png"
-              alt="Dragon Software Interface"
-              className="method-image"
-            />
-          </div>
-        </div>
-
-        <div className="method-note">
-          <p>
-            <strong>NOTE:</strong> Registration is required to use Dragon 7.0
-            software
-          </p>
-        </div>
-      </div>
-    </div>
   );
 };
 
@@ -473,7 +342,7 @@ const ContactPage = () => {
 const Footer = () => {
   return (
     <footer className="footer">
-      <div className="footer-content">© 2025 Copyright Shashwat Dhayade</div>
+      <div className="footer-content">© 2026 Copyright Shashwat Dhayade</div>
     </footer>
   );
 };
@@ -759,7 +628,7 @@ const PredictForm = () => {
         ) : (
           <div className="form-group">
             <label htmlFor="csvUpload" className="form-label">
-              Upload CSV (Max 10 Chemicals):
+              Upload CSV (Max 10 Chemicals, CAS column only):
             </label>
             <input
               id="csvUpload"
