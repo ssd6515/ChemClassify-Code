@@ -610,20 +610,6 @@ const PredictForm = () => {
                 className="form-input"
               />
             </div>
-            <div className="form-group">
-              <label htmlFor="logKOW" className="form-label">
-                logKOW:
-              </label>
-              <input
-                id="logKOW"
-                type="number"
-                placeholder="e.g., 1.91"
-                value={logKOW}
-                onChange={(e) => setLogKOW(e.target.value)}
-                required
-                className="form-input"
-              />
-            </div>
           </div>
         ) : (
           <div className="form-group">
