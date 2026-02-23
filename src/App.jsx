@@ -363,7 +363,6 @@ const PredictForm = () => {
 
   // Single prediction state
   const [cas, setCas] = useState("");
-  const [logKOW, setLogKOW] = useState("");
 
   // Batch (CSV) state
   const [file, setFile] = useState(null);
@@ -387,7 +386,6 @@ const PredictForm = () => {
   // Reset form when mode changes
   useEffect(() => {
     setCas("");
-    setLogKOW("");
     setFile(null);
     setResult(null);
     setError("");
@@ -411,7 +409,6 @@ const PredictForm = () => {
   // Reset form handler
   const resetForm = () => {
     setCas("");
-    setLogKOW("");
     setFile(null);
     setResult(null);
     setError("");
@@ -508,29 +505,29 @@ const PredictForm = () => {
   const handleDownloadResults = () => {
     if (!result) return;
 
-    // Determine feature keys (drop CAS & logKOW since they're our first two columns)
+    // Determine feature keys (drop CAS since it's our first column)
     const sampleDataset = mode === "single"
       ? result.dataset
       : result.results[0].dataset;
     const featureKeys = Object.keys(sampleDataset)
-      .filter((k) => k !== "CAS" && k !== "logKOW");
+      .filter((k) => k !== "CAS");
 
     // Build CSV header
-    const header = ["cas", "logKOW", "prediction", ...featureKeys].join(",") + "\n";
+    const header = ["cas", "prediction", ...featureKeys].join(",") + "\n";
 
     // Build CSV rows
     let rows;
     if (mode === "single") {
       const {
-        dataset: { CAS, logKOW, ...allFeatures },
+        dataset: { CAS, ...allFeatures },
         prediction,
       } = result;
       const featureValues = featureKeys.map((k) => allFeatures[k]);
-      rows = [[CAS, logKOW, prediction[0], ...featureValues]];
+      rows = [[CAS, prediction[0], ...featureValues]];
     } else {
-      rows = result.results.map(({ CAS, logKOW, prediction, dataset }) => {
+      rows = result.results.map(({ CAS, prediction, dataset }) => {
         const featureValues = featureKeys.map((k) => dataset[k]);
-        return [CAS, logKOW, prediction[0], ...featureValues];
+        return [CAS, prediction[0], ...featureValues];
       });
     }
 
