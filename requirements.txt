@@ -4,3 +4,5 @@ scikit-learn
 scipy==1.15.2
 joblib
 threadpoolctl
+rdkit==2024.9.4
+boto3
