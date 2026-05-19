@@ -24,9 +24,9 @@ CORS_HEADERS = {
 
 def load_model():
     """
-    Loads the pre-trained Gradient Boosting model from best_gbdt_model.pt.
+    Loads the pre-trained Random Forest model from best_rf_model.pt.
     """
-    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_panelb.pt')
+    model_path = os.path.join(os.path.dirname(__file__), 'best_rf_model.pt')
     try:
         model = torch.load(model_path, map_location=torch.device("cpu"), weights_only=False)
         return model

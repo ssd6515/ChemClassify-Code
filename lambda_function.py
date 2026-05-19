@@ -34,7 +34,7 @@ MODEL = None
 # --- Global model load ---
 MODEL_LOADING_ERROR = None
 try:
-    model_path = os.path.join(os.path.dirname(__file__), 'best_gbdt_model_panelb.pt')
+    model_path = os.path.join(os.path.dirname(__file__), 'best_rf_model.pt')
     model = torch.load(model_path, map_location="cpu")
 except Exception as e:
     model = None
