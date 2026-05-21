@@ -60,7 +60,7 @@ const AboutModel = () => {
           <h3 className="model-subtitle">Prediction Classes</h3>
           <p>
             Based on the chemical structure, the model classifies compounds into one of the 
-            following categories with 0.691 ± 0.033 accuracy:
+            following categories with 0.692 ± 0.027 accuracy:
           </p>
           <div className="prediction-classes">
             <div className="prediction-class">
