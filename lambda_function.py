@@ -1,4 +1,5 @@
 import json
+from socket import socket
 import torch
 import os
 import sys
@@ -22,6 +23,7 @@ from urllib.error import HTTPError, URLError
 import csv
 import io
 import boto3
+from urllib.parse import quote
 from sklearn.neighbors import NearestNeighbors
 
 # --- CORS HEADER ---
@@ -105,27 +107,29 @@ def _normalize_cas(cas: str) -> str:
              .replace("\u2013", "-")
              .replace("\u2212", "-"))
 
-def _http_get(url: str, timeout: int = 500) -> bytes:
+def _http_get(url: str, timeout: int = 6) -> bytes:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=timeout) as r:
         return r.read()
 
-def _http_get_json(url: str, timeout: int = 500) -> dict:
+def _http_get_json(url: str, timeout: int = 6) -> dict:
     raw = _http_get(url, timeout=timeout)
     return json.loads(raw.decode("utf-8"))
 
-def _http_get_text(url: str, timeout: int = 500) -> str:
+def _http_get_text(url: str, timeout: int = 6) -> str:
     raw = _http_get(url, timeout=timeout)
     return raw.decode("utf-8").strip()
 
 def _retry(fn, tries: int = 2, delay: float = 0.4):
     last = None
+
     for _ in range(tries):
         try:
             return fn()
-        except (HTTPError, URLError) as e:
+        except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
             last = e
             time.sleep(delay)
+
     if last:
         raise last
 
@@ -167,69 +171,101 @@ def _pubchem_smiles_from_cid(cid: int) -> str | None:
         return None
     entry = props[0]
     # Prefer canonical; fall back to isomeric if needed
-    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
-
-def _pubchem_smiles_by_name(identifier: str) -> str | None:
-    # Mirrors PubChemPy get_compounds(identifier, "name") without adding imports.
-    url = f"{PUBCHEM}/compound/name/{identifier}/property/CanonicalSMILES,IsomericSMILES/JSON"
-    data = _retry(lambda: _http_get_json(url))
-    props = data.get("PropertyTable", {}).get("Properties", [])
-    if not props:
-        return None
-    entry = props[0]
-    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
+    return entry.get("SMILES") or entry.get("ConnectivitySMILES")
 
 def _cactus_smiles(identifier: str) -> str | None:
-    # NIH Cactus returns plain text; "Not Found" in body if missing
-    url = f"{CACTUS}/{identifier}/smiles"
+    """
+    Try NIH CACTUS resolver.
+    Returns SMILES if found, otherwise None.
+    """
+    url = f"{CACTUS}/{quote(identifier)}/smiles"
+
     try:
         txt = _retry(lambda: _http_get_text(url))
-        return None if (not txt or "Not Found" in txt) else txt
-    except (HTTPError, URLError):
+        txt = txt.strip()
+
+        if not txt:
+            return None
+
+        if "Not Found" in txt or "Page not found" in txt:
+            return None
+
+        return txt
+
+    except (HTTPError, URLError, TimeoutError, socket.timeout):
         return None
 
 def get_smiles_from_cas(cas_number: str) -> str | None:
     """
-    Resolve SMILES from a CAS number without PubChemPy.
-    Order: PubChem by RN -> PubChem SID->CID -> NIH Cactus.
-    Returns None if not found anywhere.
-    Raises HTTPError/URLError only if both resolvers are unreachable.
+    Resolve SMILES from a CAS number.
+
+    Order:
+    1. PubChem compound RN -> CID -> SMILES
+    2. PubChem substance RN -> SID -> CID -> SMILES
+    3. PubChem name lookup -> SMILES
+    4. NIH CACTUS -> SMILES
+
+    Returns None if no SMILES is found.
     """
     cas = _normalize_cas(cas_number)
+
     if not _CAS_RE.match(cas):
         raise ValueError(f"Invalid CAS format: {cas!r}")
 
-    # 1) PubChem: CAS RN -> CID(s)
+    # 1. PubChem compound RN -> CID -> SMILES
     try:
         cids = _pubchem_cids_by_rn(cas)
-        cid = cids[0] if cids else _pubchem_cid_via_sid_rn(cas)
+
+        if cids:
+            smi = _pubchem_smiles_from_cid(cids[0])
+
+            if smi:
+                return smi
+
+    except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
+        print(f"PubChem compound RN lookup failed for {cas}: {repr(e)}", flush=True)
+
+    # 2. PubChem substance RN -> SID -> CID -> SMILES
+    try:
+        cid = _pubchem_cid_via_sid_rn(cas)
+
         if cid:
             smi = _pubchem_smiles_from_cid(cid)
+
             if smi:
                 return smi
-    except (HTTPError, URLError):
-        # If the RN/SID path fails, try the PubChem name path before Cactus.
-        try:
-            smi = _pubchem_smiles_by_name(cas)
-            if smi:
-                return smi
-        except (HTTPError, URLError):
-            pass
 
-        smi = _cactus_smiles(cas)
-        if smi:
-            return smi
-        raise
+    except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
+        print(f"PubChem SID lookup failed for {cas}: {repr(e)}", flush=True)
 
-    # 2) Fallback to the legacy PubChem name path, then Cactus.
+    # 3. PubChem name lookup fallback
     try:
-        smi = _pubchem_smiles_by_name(cas)
-        if smi:
-            return smi
-    except (HTTPError, URLError):
-        pass
+        url = (
+            f"{PUBCHEM}/compound/name/{quote(cas)}"
+            "/property/CanonicalSMILES,IsomericSMILES/JSON"
+        )
 
-    return _cactus_smiles(cas)
+        data = _retry(lambda: _http_get_json(url))
+
+        props = data.get("PropertyTable", {}).get("Properties", [])
+
+        if props:
+            entry = props[0]
+            smi = entry.get("SMILES") or entry.get("ConnectivitySMILES")
+
+            if smi:
+                return smi
+
+    except (HTTPError, URLError, TimeoutError, socket.timeout, KeyError, IndexError) as e:
+        print(f"PubChem name lookup failed for {cas}: {repr(e)}", flush=True)
+
+    # 4. NIH CACTUS fallback
+    smi = _cactus_smiles(cas)
+
+    if smi:
+        return smi
+
+    return None
 
 
 def qsar_ready_smiles(smiles: str) -> str:

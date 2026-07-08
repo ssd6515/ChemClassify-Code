@@ -3,7 +3,7 @@ FROM public.ecr.aws/lambda/python:3.12
 
 # Copy your application code into the Lambda task root.
 # AWS Lambda expects the code in ${LAMBDA_TASK_ROOT}
-COPY lambda_function_direct_value.py ${LAMBDA_TASK_ROOT}
+COPY lambda_function.py ${LAMBDA_TASK_ROOT}
 COPY best_voting_model_panelb_with_AD.pt ${LAMBDA_TASK_ROOT}
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
@@ -15,5 +15,5 @@ RUN pip install --no-cache-dir \
       numpy==2.2.2 -r requirements.txt -t ${LAMBDA_TASK_ROOT}
 
 # Specify the Lambda handler in the format: file_name.function_name.
-# Here, it refers to lambda_function_direct_value.py with the lambda_handler() function.
-CMD ["lambda_function_direct_value.lambda_handler"]
+# Here, it refers to lambda_function.py with the lambda_handler() function.
+CMD ["lambda_function.lambda_handler"]

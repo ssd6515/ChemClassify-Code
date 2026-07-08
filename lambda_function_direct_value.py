@@ -49,21 +49,6 @@ REQUIRED_ARTIFACT_KEYS = {
     "applicability_domain",
 }
 
-PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
-CACTUS = "https://cactus.nci.nih.gov/chemical/structure"
-
-# Important:
-# Keep this low because API Gateway commonly times out around 29 seconds.
-# Your old code used timeout=500, which can cause 504 Gateway Timeout.
-HTTP_TIMEOUT_SECONDS = 12
-HTTP_RETRIES = 2
-HTTP_RETRY_DELAY_SECONDS = 1
-
-_CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
-
-# Warm Lambda cache. This persists only while the Lambda container stays warm.
-CAS_SMILES_CACHE = {}
-
 
 # ============================================================
 # MODEL LOADING HELPERS
@@ -122,163 +107,101 @@ def load_model_artifact():
 # HTTP / CAS LOOKUP HELPERS
 # ============================================================
 
+PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+CACTUS  = "https://cactus.nci.nih.gov/chemical/structure"
+
+_CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
+
 def _normalize_cas(cas: str) -> str:
-    """
-    Normalize CAS input and replace non-ASCII hyphens with standard hyphen.
-    """
     s = (cas or "").strip()
+    # normalize non-ASCII hyphens
+    return (s.replace("\u2010", "-")
+             .replace("\u2011", "-")
+             .replace("\u2012", "-")
+             .replace("\u2013", "-")
+             .replace("\u2212", "-"))
 
-    return (
-        s.replace("\u2010", "-")
-         .replace("\u2011", "-")
-         .replace("\u2012", "-")
-         .replace("\u2013", "-")
-         .replace("\u2212", "-")
-    )
-
-
-def _http_get(url: str, timeout: int = HTTP_TIMEOUT_SECONDS) -> bytes:
-    """
-    HTTP GET with a short timeout to avoid API Gateway 504 errors.
-    """
+def _http_get(url: str, timeout: int = 6) -> bytes:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-
     with urlopen(req, timeout=timeout) as r:
         return r.read()
 
-
-def _http_get_json(url: str, timeout: int = HTTP_TIMEOUT_SECONDS) -> dict:
+def _http_get_json(url: str, timeout: int = 6) -> dict:
     raw = _http_get(url, timeout=timeout)
     return json.loads(raw.decode("utf-8"))
 
-
-def _http_get_text(url: str, timeout: int = HTTP_TIMEOUT_SECONDS) -> str:
+def _http_get_text(url: str, timeout: int = 6) -> str:
     raw = _http_get(url, timeout=timeout)
     return raw.decode("utf-8").strip()
 
-
-def _retry(fn, tries: int = HTTP_RETRIES, delay: float = HTTP_RETRY_DELAY_SECONDS):
-    """
-    Retry short network calls.
-
-    This catches HTTP errors, URL errors, and timeout errors.
-    The timeout is intentionally short to prevent API Gateway 504 responses.
-    """
+def _retry(fn, tries: int = 2, delay: float = 0.4):
     last = None
 
-    for attempt in range(tries):
+    for _ in range(tries):
         try:
             return fn()
         except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
             last = e
-            print(
-                f"HTTP attempt {attempt + 1}/{tries} failed: {repr(e)}",
-                flush=True,
-            )
-
-            if attempt < tries - 1:
-                time.sleep(delay)
+            time.sleep(delay)
 
     if last:
         raise last
 
-
-# ============================================================
-# PUBCHEM / CACTUS RESOLUTION
-# ============================================================
+# --- CID/SID resolution using CAS as a Registry Number (RN) ---
 
 def _pubchem_cids_by_rn(cas_rn: str):
-    """
-    Resolve PubChem CID using CAS Registry Number.
-    """
-    url = f"{PUBCHEM}/compound/xref/RN/{quote(cas_rn)}/cids/JSON"
+    # Precise: CAS as a registry number (RN), not a free-text "name"
+    url = f"{PUBCHEM}/compound/xref/RN/{cas_rn}/cids/JSON"
     data = _retry(lambda: _http_get_json(url))
-
+    # If a Fault is returned, no IdentifierList will be present
     ids = data.get("IdentifierList", {}).get("CID", [])
-
     return ids
 
-
 def _pubchem_cid_via_sid_rn(cas_rn: str):
-    """
-    Some records exist only as PubChem substances.
-    This maps SID to CID.
-    """
-    url_sids = f"{PUBCHEM}/substance/xref/RN/{quote(cas_rn)}/sids/JSON"
+    # Some records exist only as Substances. Map SID -> CID.
+    url_sids = f"{PUBCHEM}/substance/xref/RN/{cas_rn}/sids/JSON"
     sid_data = _retry(lambda: _http_get_json(url_sids))
-
     sids = sid_data.get("IdentifierList", {}).get("SID", [])
-
     if not sids:
         return None
-
     sid = sids[0]
 
     url_cids = f"{PUBCHEM}/substance/sid/{sid}/cids/JSON"
     cid_data = _retry(lambda: _http_get_json(url_cids))
-
     info = cid_data.get("InformationList", {}).get("Information", [])
-
     if info and "CID" in info[0]:
         cids = info[0]["CID"]
     else:
         cids = cid_data.get("IdentifierList", {}).get("CID", [])
-
     return cids[0] if cids else None
 
-
 def _pubchem_smiles_from_cid(cid: int) -> str | None:
-    """
-    Retrieve CanonicalSMILES or IsomericSMILES from PubChem CID.
-    """
-    url = (
-        f"{PUBCHEM}/compound/cid/{cid}/property/"
-        "CanonicalSMILES,IsomericSMILES/JSON"
-    )
-
+    # Ask for both Canonical and Isomeric so we have options
+    url = f"{PUBCHEM}/compound/cid/{cid}/property/CanonicalSMILES,IsomericSMILES/JSON"
     data = _retry(lambda: _http_get_json(url))
-
+    # If the response is a Fault, there will be no PropertyTable
     props = data.get("PropertyTable", {}).get("Properties", [])
-
     if not props:
         return None
-
     entry = props[0]
-
-    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
-
-
-def _pubchem_smiles_by_name(identifier: str) -> str | None:
-    """
-    Resolve SMILES using PubChem compound/name lookup.
-    This mirrors the legacy PubChemPy get_compounds(cas, "name") behavior.
-    """
-    url = (
-        f"{PUBCHEM}/compound/name/{quote(identifier)}/property/"
-        "CanonicalSMILES,IsomericSMILES/JSON"
-    )
-
-    data = _retry(lambda: _http_get_json(url))
-    props = data.get("PropertyTable", {}).get("Properties", [])
-
-    if not props:
-        return None
-
-    entry = props[0]
-    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
-
+    # Prefer canonical; fall back to isomeric if needed
+    return entry.get("SMILES") or entry.get("ConnectivitySMILES")
 
 def _cactus_smiles(identifier: str) -> str | None:
     """
-    Resolve SMILES using NIH Cactus.
+    Try NIH CACTUS resolver.
+    Returns SMILES if found, otherwise None.
     """
-    safe_identifier = quote(identifier)
-    url = f"{CACTUS}/{safe_identifier}/smiles"
+    url = f"{CACTUS}/{quote(identifier)}/smiles"
 
     try:
         txt = _retry(lambda: _http_get_text(url))
+        txt = txt.strip()
 
-        if not txt or "Not Found" in txt:
+        if not txt:
+            return None
+
+        if "Not Found" in txt or "Page not found" in txt:
             return None
 
         return txt
@@ -286,134 +209,77 @@ def _cactus_smiles(identifier: str) -> str | None:
     except (HTTPError, URLError, TimeoutError, socket.timeout):
         return None
 
-
 def get_smiles_from_cas(cas_number: str) -> str | None:
     """
     Resolve SMILES from a CAS number.
 
     Order:
-    1. Check warm Lambda cache
-    2. PubChem CAS RN -> CID -> SMILES
-    3. PubChem SID -> CID -> SMILES
-    4. PubChem compound/name fallback
-    5. NIH Cactus fallback
+    1. PubChem compound RN -> CID -> SMILES
+    2. PubChem substance RN -> SID -> CID -> SMILES
+    3. PubChem name lookup -> SMILES
+    4. NIH CACTUS -> SMILES
 
-    Returns None if not found.
-    Raises network errors only if PubChem fails and Cactus also cannot resolve.
+    Returns None if no SMILES is found.
     """
     cas = _normalize_cas(cas_number)
 
     if not _CAS_RE.match(cas):
         raise ValueError(f"Invalid CAS format: {cas!r}")
 
-    if cas in CAS_SMILES_CACHE:
-        print(f"SMILES cache hit for CAS: {cas}", flush=True)
-        return CAS_SMILES_CACHE[cas]
-
-    print(f"Resolving SMILES for CAS: {cas}", flush=True)
-
-    # 1. PubChem RN lookup
+    # 1. PubChem compound RN -> CID -> SMILES
     try:
-        t = time.time()
         cids = _pubchem_cids_by_rn(cas)
-        print(
-            f"PubChem RN lookup time: {time.time() - t:.2f} seconds",
-            flush=True,
-        )
-
-        cid = None
 
         if cids:
-            cid = cids[0]
-        else:
-            t = time.time()
-            cid = _pubchem_cid_via_sid_rn(cas)
-            print(
-                f"PubChem SID-to-CID lookup time: {time.time() - t:.2f} seconds",
-                flush=True,
-            )
+            smi = _pubchem_smiles_from_cid(cids[0])
+
+            if smi:
+                return smi
+
+    except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
+        print(f"PubChem compound RN lookup failed for {cas}: {repr(e)}", flush=True)
+
+    # 2. PubChem substance RN -> SID -> CID -> SMILES
+    try:
+        cid = _pubchem_cid_via_sid_rn(cas)
 
         if cid:
-            t = time.time()
             smi = _pubchem_smiles_from_cid(cid)
-            print(
-                f"PubChem CID-to-SMILES lookup time: {time.time() - t:.2f} seconds",
-                flush=True,
-            )
 
             if smi:
-                CAS_SMILES_CACHE[cas] = smi
                 return smi
 
     except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
-        print(
-            f"PubChem lookup failed for CAS {cas}: {repr(e)}",
-            flush=True,
-        )
+        print(f"PubChem SID lookup failed for {cas}: {repr(e)}", flush=True)
 
-        try:
-            t = time.time()
-            smi = _pubchem_smiles_by_name(cas)
-            print(
-                f"PubChem name-to-SMILES fallback time: {time.time() - t:.2f} seconds",
-                flush=True,
-            )
-
-            if smi:
-                CAS_SMILES_CACHE[cas] = smi
-                return smi
-
-        except (HTTPError, URLError, TimeoutError, socket.timeout) as name_error:
-            print(
-                f"PubChem name lookup failed for CAS {cas}: {repr(name_error)}",
-                flush=True,
-            )
-
-        # Try Cactus before giving up.
-        t = time.time()
-        smi = _cactus_smiles(cas)
-        print(
-            f"Cactus fallback lookup time: {time.time() - t:.2f} seconds",
-            flush=True,
-        )
-
-        if smi:
-            CAS_SMILES_CACHE[cas] = smi
-            return smi
-
-        raise
-
-    # 2. PubChem name fallback if RN/SID was reachable but had no usable match.
+    # 3. PubChem name lookup fallback
     try:
-        t = time.time()
-        smi = _pubchem_smiles_by_name(cas)
-        print(
-            f"PubChem name-to-SMILES fallback time: {time.time() - t:.2f} seconds",
-            flush=True,
+        url = (
+            f"{PUBCHEM}/compound/name/{quote(cas)}"
+            "/property/CanonicalSMILES,IsomericSMILES/JSON"
         )
 
-        if smi:
-            CAS_SMILES_CACHE[cas] = smi
-            return smi
+        data = _retry(lambda: _http_get_json(url))
 
-    except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
-        print(
-            f"PubChem name lookup failed for CAS {cas}: {repr(e)}",
-            flush=True,
-        )
+        props = data.get("PropertyTable", {}).get("Properties", [])
 
-    # 3. Cactus fallback if PubChem had no usable match.
-    t = time.time()
+        if props:
+            entry = props[0]
+            smi = entry.get("SMILES") or entry.get("ConnectivitySMILES")
+
+            if smi:
+                return smi
+
+    except (HTTPError, URLError, TimeoutError, socket.timeout, KeyError, IndexError) as e:
+        print(f"PubChem name lookup failed for {cas}: {repr(e)}", flush=True)
+
+    # 4. NIH CACTUS fallback
     smi = _cactus_smiles(cas)
-    print(
-        f"Cactus fallback lookup time: {time.time() - t:.2f} seconds",
-        flush=True,
-    )
 
     if smi:
-        CAS_SMILES_CACHE[cas] = smi
+        return smi
 
-    return smi
+    return None
 
 
 # ============================================================
