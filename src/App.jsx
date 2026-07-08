@@ -4,6 +4,60 @@ import axios from "axios";
 import "./App.css";
 import emailjs from '@emailjs/browser';
 
+const MODEL_METRICS = [
+  { label: "Accuracy", value: "0.692 \u00B1 0.027" },
+  { label: "Overall recall", value: "0.564 \u00B1 0.047" },
+  { label: "Overall precision", value: "0.699 \u00B1 0.062" },
+  { label: "Weighted F1-score", value: "0.677 \u00B1 0.028" },
+  { label: "Class 2 recall", value: "0.351 \u00B1 0.136" },
+  { label: "Class 2 precision", value: "0.748 \u00B1 0.161" },
+  { label: "Class 2 F1-score", value: "0.463 \u00B1 0.130" },
+];
+
+const getPredictionValue = (prediction) => {
+  if (Array.isArray(prediction)) return prediction[0];
+  return prediction ?? "";
+};
+
+const getResultRows = (result, mode) => {
+  if (!result) return [];
+  if (mode === "single") {
+    return [{ ...result, CAS: result.CAS || result.dataset?.CAS }];
+  }
+  return Array.isArray(result.results) ? result.results : [];
+};
+
+const formatProbability = (value) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return "N/A";
+  return `${(value * 100).toFixed(1)}%`;
+};
+
+const formatDecimal = (value) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return "N/A";
+  return value.toFixed(3);
+};
+
+const formatFeatureList = (features) => {
+  if (Array.isArray(features)) return features.join("; ");
+  return features || "";
+};
+
+const csvEscape = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const text = Array.isArray(value)
+    ? value.join("; ")
+    : typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value);
+
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+};
+
 // Website loading animation component
 const WebsiteLoader = () => {
   const [progress, setProgress] = useState(0);
@@ -60,7 +114,7 @@ const AboutModel = () => {
           <h3 className="model-subtitle">Prediction Classes</h3>
           <p>
             Based on the chemical structure, the model classifies compounds into one of the 
-            following categories with 0.692 ± 0.027 accuracy:
+            following categories:
           </p>
           <div className="prediction-classes">
             <div className="prediction-class">
@@ -88,9 +142,24 @@ const AboutModel = () => {
         </div>
 
         <div className="model-section">
+          <h3 className="model-subtitle">Model Performance</h3>
+          <div className="metrics-grid">
+            {MODEL_METRICS.map((metric) => (
+              <div className="metric-item" key={metric.label}>
+                <span className="metric-label">{metric.label}</span>
+                <strong className="metric-value">{metric.value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="model-section">
           <p className="model-goal">
             Our goal is to assist in the risk assessment of chemical exposure by providing 
-            reliable predictions of bioconcentration behavior based on chemical features.
+            reliable predictions of bioconcentration behavior based on chemical features. This
+            prediction should be interpreted as a screening-level result. The model is intended
+            to provide an additional prediction perspective and should not be used as a
+            standalone basis for regulatory classification.
           </p>
         </div>
       </div>
@@ -393,15 +462,8 @@ const PredictForm = () => {
 
   // Handle file selection
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    setFile(file);
-    // parse CAS column
-    const reader = new FileReader();
-    reader.onload = () => {
-      const rows = reader.result.split("\n").slice(1);     // skip header
-      setCasList(rows.map(r => r.split(",")[0] || ""));
-    };
-    reader.readAsText(file);
+    const selectedFile = e.target.files[0] || null;
+    setFile(selectedFile);
     setError("");
     setResult(null);
   };
@@ -505,35 +567,53 @@ const PredictForm = () => {
   const handleDownloadResults = () => {
     if (!result) return;
 
-    // Determine feature keys (drop CAS since it's our first column)
-    const sampleDataset = mode === "single"
-      ? result.dataset
-      : result.results[0].dataset;
-    const featureKeys = Object.keys(sampleDataset)
-      .filter((k) => k !== "CAS");
+    const resultRows = getResultRows(result, mode);
+    if (!resultRows.length) return;
 
-    // Build CSV header
-    const header = ["cas", "prediction", ...featureKeys].join(",") + "\n";
+    const sampleDataset = resultRows.find((row) => row.dataset)?.dataset || {};
+    const featureKeys = Object.keys(sampleDataset).filter((k) => k !== "CAS");
+    const probabilityKeys = [
+      ...new Set(
+        resultRows.flatMap((row) => Object.keys(row.class_probabilities || {}))
+      ),
+    ];
+    const diagnosticColumns = [
+      ["cas", (row) => row.CAS || row.dataset?.CAS],
+      ["prediction", (row) => getPredictionValue(row.prediction)],
+      ["max_prediction_probability", (row) => row.max_prediction_probability],
+      ["ad_status", (row) => row.ad_status],
+      ["prediction_reliability", (row) => row.prediction_reliability],
+      ["knn_mean_distance", (row) => row.knn_mean_distance],
+      ["ad_distance_threshold", (row) => row.ad_distance_threshold],
+      ["inside_distance_ad", (row) => row.inside_distance_ad],
+      ["feature_range_warning", (row) => row.feature_range_warning],
+      [
+        "n_features_outside_training_range",
+        (row) => row.n_features_outside_training_range,
+      ],
+      [
+        "fraction_features_outside_training_range",
+        (row) => row.fraction_features_outside_training_range,
+      ],
+      [
+        "features_outside_training_range",
+        (row) => formatFeatureList(row.features_outside_training_range),
+      ],
+    ];
 
-    // Build CSV rows
-    let rows;
-    if (mode === "single") {
-      const {
-        dataset: { CAS, ...allFeatures },
-        prediction,
-      } = result;
-      const featureValues = featureKeys.map((k) => allFeatures[k]);
-      rows = [[CAS, prediction[0], ...featureValues]];
-    } else {
-      rows = result.results.map(({ CAS, prediction, dataset }) => {
-        const featureValues = featureKeys.map((k) => dataset[k]);
-        return [CAS, prediction[0], ...featureValues];
-      });
-    }
+    const header = [
+      ...diagnosticColumns.map(([column]) => column),
+      ...probabilityKeys,
+      ...featureKeys,
+    ];
+    const rows = resultRows.map((row) => [
+      ...diagnosticColumns.map(([, getValue]) => getValue(row)),
+      ...probabilityKeys.map((key) => row.class_probabilities?.[key]),
+      ...featureKeys.map((key) => row.dataset?.[key]),
+    ]);
 
     const csvContent =
-      header +
-      rows.map((r) => r.join(",")).join("\n") +
+      [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n") +
       "\n";
 
     // Trigger download
@@ -546,6 +626,98 @@ const PredictForm = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const resultRows = getResultRows(result, mode);
+  const singleResult = resultRows[0];
+
+  const renderProbabilityList = (classProbabilities) => {
+    const entries = Object.entries(classProbabilities || {});
+    if (!entries.length) return null;
+
+    return (
+      <div className="probability-list">
+        {entries.map(([className, probability]) => (
+          <div className="probability-item" key={className}>
+            <span>{className.replace("class_", "Class ")}</span>
+            <strong>{formatProbability(probability)}</strong>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderReliabilityBadge = (value) => (
+    <span className={`reliability-badge reliability-${String(value || "").toLowerCase()}`}>
+      {value || "N/A"}
+    </span>
+  );
+
+  const renderSingleResult = () => {
+    if (!singleResult) return null;
+
+    return (
+      <div className="single-result-summary">
+        <div className="result-summary-grid">
+          <div className="result-stat">
+            <span>Predicted class</span>
+            <strong>{getPredictionValue(singleResult.prediction)}</strong>
+          </div>
+          <div className="result-stat">
+            <span>Model confidence</span>
+            <strong>{formatProbability(singleResult.max_prediction_probability)}</strong>
+          </div>
+          <div className="result-stat">
+            <span>Applicability domain</span>
+            <strong>{singleResult.ad_status || "N/A"}</strong>
+          </div>
+          <div className="result-stat">
+            <span>Reliability</span>
+            {renderReliabilityBadge(singleResult.prediction_reliability)}
+          </div>
+        </div>
+        <div className="ad-detail-row">
+          <span>kNN distance: {formatDecimal(singleResult.knn_mean_distance)}</span>
+          <span>AD threshold: {formatDecimal(singleResult.ad_distance_threshold)}</span>
+          <span>
+            Outside-range features:{" "}
+            {singleResult.n_features_outside_training_range ?? "N/A"}
+          </span>
+        </div>
+        {renderProbabilityList(singleResult.class_probabilities)}
+      </div>
+    );
+  };
+
+  const renderBatchResults = () => {
+    if (!resultRows.length) return null;
+
+    return (
+      <div className="results-table-wrapper">
+        <table className="results-table">
+          <thead>
+            <tr>
+              <th>CAS</th>
+              <th>Prediction</th>
+              <th>Confidence</th>
+              <th>Applicability domain</th>
+              <th>Reliability</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resultRows.map((row, index) => (
+              <tr key={`${row.CAS || row.dataset?.CAS || "row"}-${index}`}>
+                <td>{row.CAS || row.dataset?.CAS}</td>
+                <td>{getPredictionValue(row.prediction)}</td>
+                <td>{formatProbability(row.max_prediction_probability)}</td>
+                <td>{row.ad_status || "N/A"}</td>
+                <td>{renderReliabilityBadge(row.prediction_reliability)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
 
@@ -656,9 +828,14 @@ const PredictForm = () => {
       {result && (
         <div ref={resultsRef} className="results-container">
           <h3 className="results-title">Results</h3>
-          <pre className="results-content">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          {mode === "single" ? renderSingleResult() : renderBatchResults()}
+
+          <details className="raw-results">
+            <summary>Full JSON response</summary>
+            <pre className="results-content">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </details>
 
           <button
             type="button"

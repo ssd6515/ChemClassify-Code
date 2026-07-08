@@ -7,12 +7,18 @@ from rdkit.Chem import Descriptors
 from rdkit.ML.Descriptors import MoleculeDescriptors
 import sklearn
 import sklearn.ensemble
+import sklearn.impute
+import sklearn.linear_model
+import sklearn.pipeline
+import sklearn.preprocessing
+import sklearn.svm
 import sklearn.tree
 import json
 import re
 import time
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
+from sklearn.neighbors import NearestNeighbors
 
 # --- CORS HEADER ---
 CORS_HEADERS = {
@@ -22,16 +28,46 @@ CORS_HEADERS = {
 
 # --- Helper Functions ---
 
-def load_model():
+MODEL_ARTIFACT_NAME = "best_voting_model_panelb_with_AD.pt"
+REQUIRED_ARTIFACT_KEYS = {
+    "model",
+    "feature_names",
+    "class_labels",
+    "train_col_means",
+    "applicability_domain",
+}
+
+
+def load_model_artifact():
     """
-    Loads the pre-trained Random Forest model from best_rf_model.pt.
+    Loads the trained VotingClassifier artifact with applicability-domain metadata.
     """
-    model_path = os.path.join(os.path.dirname(__file__), 'best_rf_model.pt')
+    model_path = os.path.join(os.path.dirname(__file__), MODEL_ARTIFACT_NAME)
     try:
-        model = torch.load(model_path, map_location=torch.device("cpu"), weights_only=False)
-        return model
+        try:
+            artifact = torch.load(
+                model_path,
+                map_location=torch.device("cpu"),
+                weights_only=False,
+            )
+        except TypeError:
+            artifact = torch.load(model_path, map_location=torch.device("cpu"))
+
+        if not isinstance(artifact, dict):
+            return {"error": "Loaded model artifact is not a dictionary."}
+
+        missing_keys = sorted(REQUIRED_ARTIFACT_KEYS.difference(artifact.keys()))
+        if missing_keys:
+            return {
+                "error": (
+                    "Model artifact is missing required key(s): "
+                    + ", ".join(missing_keys)
+                )
+            }
+
+        return artifact
     except Exception as e:
-        return {"error": f"Error loading model: {str(e)}"}
+        return {"error": f"Error loading model artifact: {str(e)}"}
 
 
 PUBCHEM = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
@@ -167,7 +203,7 @@ def qsar_ready_smiles(smiles: str) -> str:
 def generate_rdkit_features(smiles: str) -> dict:
     """
     Generate RDKit-based molecular descriptors for a single molecule given its SMILES.
-    Missing descriptor values are replaced with 0.0.
+    Missing descriptor values are preserved as NaN for the trained imputer.
     """
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -178,10 +214,10 @@ def generate_rdkit_features(smiles: str) -> dict:
     desc_vals = calc.CalcDescriptors(mol)
     desc_dict = dict(zip(descNames, desc_vals))
     
-    # Replace missing values with 0.0
+    # Preserve missing values for the model's trained mean imputer.
     for key, value in desc_dict.items():
         if value is None or (isinstance(value, float) and np.isnan(value)):
-            desc_dict[key] = 0.0
+            desc_dict[key] = np.nan
     return desc_dict
 
 def combine_features(cas_id: str) -> dict:
@@ -203,68 +239,223 @@ def combine_features(cas_id: str) -> dict:
 
 def prepare_numeric_features(combined: dict) -> np.ndarray:
     """
-    Extracts numeric features in the specific order expected by the model.
+    Extracts numeric features in the feature order saved with the model artifact.
     """
-    feature_order = [
-        "MaxAbsEStateIndex", "MaxEStateIndex", "MinAbsEStateIndex", "MinEStateIndex",
-        "qed", "SPS", "MolWt", "HeavyAtomMolWt", "ExactMolWt", "NumValenceElectrons", "NumRadicalElectrons",
-        "MaxPartialCharge", "MinPartialCharge", "MaxAbsPartialCharge", "MinAbsPartialCharge",
-        "FpDensityMorgan1", "FpDensityMorgan2", "FpDensityMorgan3", "BCUT2D_MWHI", "BCUT2D_MWLOW",
-        "BCUT2D_CHGHI", "BCUT2D_CHGLO", "BCUT2D_LOGPHI", "BCUT2D_LOGPLOW", "BCUT2D_MRHI", "BCUT2D_MRLOW",
-        "AvgIpc", "BalabanJ", "BertzCT", "Chi0", "Chi0n", "Chi0v", "Chi1", "Chi1n", "Chi1v", "Chi2n", "Chi2v",
-        "Chi3n", "Chi3v", "Chi4n", "Chi4v", "HallKierAlpha", "Ipc", "Kappa1", "Kappa2", "Kappa3", "LabuteASA",
-        "PEOE_VSA1", "PEOE_VSA10", "PEOE_VSA11", "PEOE_VSA12", "PEOE_VSA13", "PEOE_VSA14", "PEOE_VSA2",
-        "PEOE_VSA3", "PEOE_VSA4", "PEOE_VSA5", "PEOE_VSA6", "PEOE_VSA7", "PEOE_VSA8", "PEOE_VSA9",
-        "SMR_VSA1", "SMR_VSA10", "SMR_VSA2", "SMR_VSA3", "SMR_VSA4", "SMR_VSA5", "SMR_VSA6", "SMR_VSA7",
-        "SMR_VSA9", "SlogP_VSA1", "SlogP_VSA10", "SlogP_VSA11", "SlogP_VSA12", "SlogP_VSA2", "SlogP_VSA3",
-        "SlogP_VSA4", "SlogP_VSA5", "SlogP_VSA6", "SlogP_VSA7", "SlogP_VSA8", "TPSA", "EState_VSA1", "EState_VSA10",
-        "EState_VSA11", "EState_VSA2", "EState_VSA3", "EState_VSA4", "EState_VSA5", "EState_VSA6", "EState_VSA7",
-        "EState_VSA8", "EState_VSA9", "VSA_EState1", "VSA_EState10", "VSA_EState2", "VSA_EState3", "VSA_EState4",
-        "VSA_EState5", "VSA_EState6", "VSA_EState7", "VSA_EState8", "VSA_EState9", "FractionCSP3", "HeavyAtomCount",
-        "NHOHCount", "NOCount", "NumAliphaticCarbocycles", "NumAliphaticHeterocycles", "NumAliphaticRings",
-        "NumAmideBonds", "NumAromaticCarbocycles", "NumAromaticHeterocycles", "NumAromaticRings",
-        "NumAtomStereoCenters", "NumBridgeheadAtoms", "NumHAcceptors", "NumHDonors", "NumHeteroatoms",
-        "NumHeterocycles", "NumRotatableBonds", "NumSaturatedCarbocycles", "NumSaturatedHeterocycles",
-        "NumSaturatedRings", "NumUnspecifiedAtomStereoCenters", "Phi", "RingCount", "MolLogP", "MolMR",
-        "fr_Al_COO", "fr_Al_OH", "fr_Al_OH_noTert", "fr_ArN", "fr_Ar_COO", "fr_Ar_N", "fr_Ar_NH", "fr_Ar_OH",
-        "fr_COO", "fr_COO2", "fr_C_O", "fr_C_O_noCOO", "fr_C_S", "fr_Imine", "fr_NH0", "fr_NH1", "fr_NH2",
-        "fr_N_O", "fr_Ndealkylation1", "fr_Ndealkylation2", "fr_Nhpyrrole", "fr_SH", "fr_aldehyde",
-        "fr_alkyl_carbamate", "fr_alkyl_halide", "fr_allylic_oxid", "fr_amide", "fr_amidine", "fr_aniline",
-        "fr_aryl_methyl", "fr_benzene", "fr_bicyclic", "fr_ester", "fr_ether", "fr_furan", "fr_guanido",
-        "fr_halogen", "fr_hdrzine", "fr_hdrzone", "fr_imidazole", "fr_imide", "fr_ketone", "fr_ketone_Topliss",
-        "fr_lactone", "fr_methoxy", "fr_morpholine", "fr_nitrile", "fr_nitro", "fr_nitro_arom", "fr_nitroso",
-        "fr_oxazole", "fr_oxime", "fr_para_hydroxylation", "fr_phenol", "fr_phenol_noOrthoHbond", "fr_phos_acid",
-        "fr_phos_ester", "fr_piperdine", "fr_piperzine", "fr_priamide", "fr_pyridine", "fr_sulfide",
-        "fr_sulfonamd", "fr_sulfone", "fr_term_acetylene", "fr_thiazole", "fr_thiocyan", "fr_thiophene",
-        "fr_urea"
-    ]
-    
-    numeric = []
-    missing_features = []
-    for feature in feature_order:
-        if feature in combined:
-            numeric.append(combined[feature])
+    if not FEATURE_NAMES:
+        raise ValueError("Model feature names were not loaded.")
+
+    numeric = [_coerce_numeric_feature(combined.get(feature)) for feature in FEATURE_NAMES]
+    return np.array([numeric], dtype=float)
+
+
+def _coerce_numeric_feature(value):
+    if value is None:
+        return np.nan
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return np.nan
+
+    return numeric_value if np.isfinite(numeric_value) else np.nan
+
+
+def impute_with_column_means(X, col_means):
+    X_array = np.asarray(X, dtype=float).copy()
+    missing_rows, missing_cols = np.where(np.isnan(X_array))
+    X_array[missing_rows, missing_cols] = col_means[missing_cols]
+    return X_array
+
+
+def evaluate_applicability_domain(X_query_imputed):
+    X_query_imputed = np.asarray(X_query_imputed, dtype=float)
+
+    descriptor_mean = np.asarray(AD_REFERENCE["descriptor_mean"], dtype=float)
+    descriptor_std = np.asarray(AD_REFERENCE["descriptor_std"], dtype=float)
+    feature_min = np.asarray(AD_REFERENCE["feature_min"], dtype=float)
+    feature_max = np.asarray(AD_REFERENCE["feature_max"], dtype=float)
+    X_train_scaled_for_ad = np.asarray(
+        AD_REFERENCE["training_scaled_features_for_ad"],
+        dtype=float,
+    )
+    ad_k = int(AD_REFERENCE["ad_k_effective"])
+    ad_distance_threshold = float(AD_REFERENCE["ad_distance_threshold"])
+
+    X_query_scaled_for_ad = (X_query_imputed - descriptor_mean) / descriptor_std
+
+    knn_query = NearestNeighbors(
+        n_neighbors=ad_k,
+        metric="euclidean",
+    )
+    knn_query.fit(X_train_scaled_for_ad)
+
+    query_distances, query_neighbor_indices = knn_query.kneighbors(
+        X_query_scaled_for_ad
+    )
+
+    query_knn_mean_distances = query_distances.mean(axis=1)
+    inside_distance_ad = query_knn_mean_distances <= ad_distance_threshold
+
+    outside_feature_range_matrix = (
+        (X_query_imputed < feature_min) | (X_query_imputed > feature_max)
+    )
+    n_features_outside_range = outside_feature_range_matrix.sum(axis=1)
+    fraction_features_outside_range = (
+        n_features_outside_range / X_query_imputed.shape[1]
+    )
+    feature_range_warning = (
+        fraction_features_outside_range > FEATURE_RANGE_WARNING_THRESHOLD
+    )
+
+    ad_status = []
+    for inside_distance, range_warning in zip(
+        inside_distance_ad,
+        feature_range_warning,
+    ):
+        if inside_distance and not range_warning:
+            ad_status.append("Inside AD")
+        elif inside_distance and range_warning:
+            ad_status.append("Inside distance-based AD, but descriptor-range warning")
         else:
-            missing_features.append(feature)
-    if missing_features:
-        raise KeyError(f"The following required features are missing: {missing_features}")
-    return np.array([numeric])
+            ad_status.append("Outside AD")
+
+    return {
+        "query_knn_mean_distances": query_knn_mean_distances,
+        "query_neighbor_indices": query_neighbor_indices,
+        "inside_distance_ad": inside_distance_ad,
+        "n_features_outside_range": n_features_outside_range,
+        "fraction_features_outside_range": fraction_features_outside_range,
+        "feature_range_warning": feature_range_warning,
+        "outside_feature_range_matrix": outside_feature_range_matrix,
+        "ad_status": np.array(ad_status, dtype=object),
+        "ad_distance_threshold": ad_distance_threshold,
+    }
+
+
+def assign_prediction_reliability(ad_status, max_prediction_probability):
+    reliability = []
+
+    for status, max_prob in zip(ad_status, max_prediction_probability):
+        if status == "Inside AD" and max_prob >= HIGH_CONFIDENCE_THRESHOLD:
+            reliability.append("High")
+        elif status == "Inside AD" and max_prob >= MODERATE_CONFIDENCE_THRESHOLD:
+            reliability.append("Moderate")
+        else:
+            reliability.append("Low")
+
+    return np.array(reliability, dtype=object)
+
+
+def get_outside_range_feature_names(outside_feature_range_row):
+    return [
+        feature_name
+        for feature_name, is_outside in zip(FEATURE_NAMES, outside_feature_range_row)
+        if is_outside
+    ]
+
+
+def _json_safe(value):
+    if isinstance(value, np.ndarray):
+        return [_json_safe(item) for item in value.tolist()]
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        return float(value) if np.isfinite(value) else None
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    return value
+
+
+def build_prediction_payload(features):
+    prediction = model.predict(features)
+    prediction_probabilities = model.predict_proba(features)
+    max_prediction_probability = np.max(prediction_probabilities, axis=1)
+
+    imputed_features = impute_with_column_means(features, TRAIN_COL_MEANS)
+    ad_results = evaluate_applicability_domain(imputed_features)
+    prediction_reliability = assign_prediction_reliability(
+        ad_status=ad_results["ad_status"],
+        max_prediction_probability=max_prediction_probability,
+    )
+
+    class_probabilities = {
+        f"class_{_json_safe(class_label)}": _json_safe(probability)
+        for class_label, probability in zip(
+            CLASS_LABELS,
+            prediction_probabilities[0],
+        )
+    }
+
+    return {
+        "prediction": _json_safe(prediction),
+        "class_probabilities": class_probabilities,
+        "max_prediction_probability": _json_safe(max_prediction_probability[0]),
+        "ad_status": _json_safe(ad_results["ad_status"][0]),
+        "prediction_reliability": _json_safe(prediction_reliability[0]),
+        "knn_mean_distance": _json_safe(ad_results["query_knn_mean_distances"][0]),
+        "ad_distance_threshold": _json_safe(ad_results["ad_distance_threshold"]),
+        "inside_distance_ad": _json_safe(ad_results["inside_distance_ad"][0]),
+        "feature_range_warning": _json_safe(ad_results["feature_range_warning"][0]),
+        "n_features_outside_training_range": _json_safe(
+            ad_results["n_features_outside_range"][0]
+        ),
+        "fraction_features_outside_training_range": _json_safe(
+            ad_results["fraction_features_outside_range"][0]
+        ),
+        "features_outside_training_range": get_outside_range_feature_names(
+            ad_results["outside_feature_range_matrix"][0]
+        ),
+    }
 
 # --- Global Model Loading ---
 # Loading the model globally helps reuse it across Lambda invocations.
-model = load_model()
-if isinstance(model, dict) and "error" in model:
-    MODEL_LOADING_ERROR = model["error"]
+MODEL_ARTIFACT = load_model_artifact()
+if isinstance(MODEL_ARTIFACT, dict) and "error" in MODEL_ARTIFACT:
+    MODEL_LOADING_ERROR = MODEL_ARTIFACT["error"]
+    model = None
+    FEATURE_NAMES = []
+    CLASS_LABELS = []
+    TRAIN_COL_MEANS = np.array([], dtype=float)
+    AD_REFERENCE = {}
+    FEATURE_RANGE_WARNING_THRESHOLD = 0.05
+    HIGH_CONFIDENCE_THRESHOLD = 0.70
+    MODERATE_CONFIDENCE_THRESHOLD = 0.50
 else:
     MODEL_LOADING_ERROR = None
+    model = MODEL_ARTIFACT["model"]
+    FEATURE_NAMES = [str(feature) for feature in MODEL_ARTIFACT["feature_names"]]
+    CLASS_LABELS = list(MODEL_ARTIFACT["class_labels"])
+    TRAIN_COL_MEANS = np.asarray(MODEL_ARTIFACT["train_col_means"], dtype=float)
+    AD_REFERENCE = MODEL_ARTIFACT["applicability_domain"]
+    FEATURE_RANGE_WARNING_THRESHOLD = float(
+        MODEL_ARTIFACT.get("feature_range_warning_threshold", 0.05)
+    )
+    HIGH_CONFIDENCE_THRESHOLD = float(
+        MODEL_ARTIFACT.get("high_confidence_threshold", 0.70)
+    )
+    MODERATE_CONFIDENCE_THRESHOLD = float(
+        MODEL_ARTIFACT.get("moderate_confidence_threshold", 0.50)
+    )
 
 def lambda_handler(event, context):
     # 1) Early model‑load error
-    if MODEL_LOADING_ERROR:
+    if MODEL_LOADING_ERROR or model is None:
         return {
             "statusCode": 500,
             "headers": CORS_HEADERS,
             "body": json.dumps({"error": f"Model loading error: {MODEL_LOADING_ERROR}"})
+        }
+    if not hasattr(model, "predict") or not hasattr(model, "predict_proba"):
+        return {
+            "statusCode": 500,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": "Loaded model has no predict/predict_proba methods"})
         }
 
     # 2) Parse input
@@ -292,8 +483,7 @@ def lambda_handler(event, context):
     # 4) Predict
     try:
         features = prepare_numeric_features(combined)
-        #tensor = torch.tensor(features, dtype=torch.float)
-        prediction = model.predict(features)
+        prediction_payload = build_prediction_payload(features)
     except Exception as e:
         return {
             "statusCode": 500,
@@ -303,11 +493,11 @@ def lambda_handler(event, context):
 
     # 5) Success
     output = {
-        "prediction": prediction.tolist() if hasattr(prediction, "tolist") else prediction,
+        **prediction_payload,
         "dataset": combined
     }
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps(output)
+        "body": json.dumps(_json_safe(output))
     }
