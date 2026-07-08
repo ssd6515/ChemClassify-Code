@@ -169,6 +169,16 @@ def _pubchem_smiles_from_cid(cid: int) -> str | None:
     # Prefer canonical; fall back to isomeric if needed
     return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
 
+def _pubchem_smiles_by_name(identifier: str) -> str | None:
+    # Mirrors PubChemPy get_compounds(identifier, "name") without adding imports.
+    url = f"{PUBCHEM}/compound/name/{identifier}/property/CanonicalSMILES,IsomericSMILES/JSON"
+    data = _retry(lambda: _http_get_json(url))
+    props = data.get("PropertyTable", {}).get("Properties", [])
+    if not props:
+        return None
+    entry = props[0]
+    return entry.get("CanonicalSMILES") or entry.get("IsomericSMILES")
+
 def _cactus_smiles(identifier: str) -> str | None:
     # NIH Cactus returns plain text; "Not Found" in body if missing
     url = f"{CACTUS}/{identifier}/smiles"
@@ -198,13 +208,27 @@ def get_smiles_from_cas(cas_number: str) -> str | None:
             if smi:
                 return smi
     except (HTTPError, URLError):
-        # If PubChem is unreachable, try Cactus before re-raising
+        # If the RN/SID path fails, try the PubChem name path before Cactus.
+        try:
+            smi = _pubchem_smiles_by_name(cas)
+            if smi:
+                return smi
+        except (HTTPError, URLError):
+            pass
+
         smi = _cactus_smiles(cas)
         if smi:
             return smi
         raise
 
-    # 2) Fallback to Cactus even if PubChem was reachable but had no match
+    # 2) Fallback to the legacy PubChem name path, then Cactus.
+    try:
+        smi = _pubchem_smiles_by_name(cas)
+        if smi:
+            return smi
+    except (HTTPError, URLError):
+        pass
+
     return _cactus_smiles(cas)
 
 
