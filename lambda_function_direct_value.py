@@ -1,6 +1,7 @@
 import json
 import torch
 import os
+import sys
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors
@@ -38,12 +39,26 @@ REQUIRED_ARTIFACT_KEYS = {
 }
 
 
+def register_sklearn_pickle_compat_modules():
+    """
+    Some sklearn loss classes pickle with the top-level module name "_loss".
+    Register the installed sklearn Cython loss module under that name before loading.
+    """
+    try:
+        import sklearn._loss._loss as sklearn_loss
+
+        sys.modules.setdefault("_loss", sklearn_loss)
+    except Exception:
+        pass
+
+
 def load_model_artifact():
     """
     Loads the trained VotingClassifier artifact with applicability-domain metadata.
     """
     model_path = os.path.join(os.path.dirname(__file__), MODEL_ARTIFACT_NAME)
     try:
+        register_sklearn_pickle_compat_modules()
         try:
             artifact = torch.load(
                 model_path,
