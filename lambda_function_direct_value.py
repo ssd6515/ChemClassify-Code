@@ -99,16 +99,16 @@ def _normalize_cas(cas: str) -> str:
              .replace("\u2013", "-")
              .replace("\u2212", "-"))
 
-def _http_get(url: str, timeout: int = 6) -> bytes:
+def _http_get(url: str, timeout: int = 500) -> bytes:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=timeout) as r:
         return r.read()
 
-def _http_get_json(url: str, timeout: int = 6) -> dict:
+def _http_get_json(url: str, timeout: int = 500) -> dict:
     raw = _http_get(url, timeout=timeout)
     return json.loads(raw.decode("utf-8"))
 
-def _http_get_text(url: str, timeout: int = 6) -> str:
+def _http_get_text(url: str, timeout: int = 500) -> str:
     raw = _http_get(url, timeout=timeout)
     return raw.decode("utf-8").strip()
 
