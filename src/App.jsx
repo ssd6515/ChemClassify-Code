@@ -142,7 +142,14 @@ const AboutModel = () => {
         </div>
 
         <div className="model-section">
-          <h3 className="model-subtitle">Model Performance</h3>
+          <h3 className="model-subtitle">Voting Classifier Model Performance</h3>
+          <p className="model-description">
+            The Voting Classifier combines predictions from Random Forest, Logistic
+            Regression, Support Vector Classifier, and Gradient-Boosted Decision Tree
+            models. It generates a confidence score for each bioconcentration mechanism
+            class—Class 1, Class 2, and Class 3—and assigns the chemical to the class
+            with the highest confidence score.
+          </p>
           <div className="metrics-grid">
             {MODEL_METRICS.map((metric) => (
               <div className="metric-item" key={metric.label}>
@@ -347,12 +354,6 @@ const ContactPage = () => {
           <p>
             <a href="mailto:ssd6515@mavs.uta.edu">ssd6515@mavs.uta.edu</a>
           </p>
-        </div>
-
-        <div className="contact-card">
-          <div className="contact-icon phone-icon"></div>
-          <h3>Phone</h3>
-          <p>+1(469)927-4741</p>
         </div>
       </div>
 

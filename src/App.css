@@ -1477,6 +1477,14 @@ body {
   margin-bottom: 1rem;
 }
 
+.model-description {
+  max-width: 760px;
+  margin: 0.5rem 0 1.25rem;
+  color: #5f6773;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 .model-subtitle {
   color: var(--primary-color);
   margin-bottom: 0.75rem;
