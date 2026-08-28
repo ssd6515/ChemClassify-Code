@@ -148,9 +148,14 @@ const AboutModel = () => {
             with the highest confidence score.
 
             Applicability Domain (AD): The results show whether the query chemical is within our training space (Inside AD) or not (Outside AD).
-
+          </p>
+          <p className="model-description">
+            Applicability Domain (AD): The results show whether the query chemical is within our training space (Inside AD) or not (Outside AD).
+          </p>
+          <p className="model-description">
             Descriptor Range: The results show the number of generated RDKit features that are outside our training space (Outside-range features).
-
+          </p>
+          <p className="model-description">
             Using this information, careful interpretations can be made of the bioconcentration behavior of the query chemical.
           </p>
           <div className="metrics-grid">
