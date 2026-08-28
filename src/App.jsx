@@ -118,21 +118,18 @@ const AboutModel = () => {
           </p>
           <div className="prediction-classes">
             <div className="prediction-class">
-              <div className="class-indicator orange"></div>
               <div className="class-details">
                 <h4>Class 1: Inert Chemicals</h4>
                 <p>Tend to accumulate in lipids</p>
               </div>
             </div>
             <div className="prediction-class">
-              <div className="class-indicator red"></div>
               <div className="class-details">
                 <h4>Class 2: Specifically Bioconcentrating Chemicals</h4>
                 <p>Actively interact with proteins or biological tissues</p>
               </div>
             </div>
             <div className="prediction-class">
-              <div className="class-indicator green"></div>
               <div className="class-details">
                 <h4>Class 3: Less Bioconcentrating Chemicals</h4>
                 <p>Are typically metabolized or eliminated from the organism</p>
@@ -149,6 +146,12 @@ const AboutModel = () => {
             models. It generates a confidence score for each bioconcentration mechanism
             class—Class 1, Class 2, and Class 3—and assigns the chemical to the class
             with the highest confidence score.
+
+            Applicability Domain (AD): The results show whether the query chemical is within our training space (Inside AD) or not (Outside AD).
+
+            Descriptor Range: The results show the number of generated RDKit features that are outside our training space (Outside-range features).
+
+            Using this information, careful interpretations can be made of the bioconcentration behavior of the query chemical.
           </p>
           <div className="metrics-grid">
             {MODEL_METRICS.map((metric) => (
@@ -163,7 +166,7 @@ const AboutModel = () => {
         <div className="model-section">
           <p className="model-goal">
             Our goal is to assist in the risk assessment of chemical exposure by providing 
-            reliable predictions of bioconcentration behavior based on chemical features. This
+            fast and accessible predictions of bioconcentration behavior based on chemical features. This
             prediction should be interpreted as a screening-level result. The model is intended
             to provide an additional prediction perspective and should not be used as a
             standalone basis for regulatory classification.
