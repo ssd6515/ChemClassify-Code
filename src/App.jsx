@@ -583,7 +583,6 @@ const PredictForm = () => {
       ["prediction", (row) => getPredictionValue(row.prediction)],
       ["max_prediction_probability", (row) => row.max_prediction_probability],
       ["ad_status", (row) => row.ad_status],
-      ["prediction_reliability", (row) => row.prediction_reliability],
       ["knn_mean_distance", (row) => row.knn_mean_distance],
       ["ad_distance_threshold", (row) => row.ad_distance_threshold],
       ["inside_distance_ad", (row) => row.inside_distance_ad],
@@ -648,12 +647,6 @@ const PredictForm = () => {
     );
   };
 
-  const renderReliabilityBadge = (value) => (
-    <span className={`reliability-badge reliability-${String(value || "").toLowerCase()}`}>
-      {value || "N/A"}
-    </span>
-  );
-
   const renderSingleResult = () => {
     if (!singleResult) return null;
 
@@ -671,10 +664,6 @@ const PredictForm = () => {
           <div className="result-stat">
             <span>Applicability domain</span>
             <strong>{singleResult.ad_status || "N/A"}</strong>
-          </div>
-          <div className="result-stat">
-            <span>Reliability</span>
-            {renderReliabilityBadge(singleResult.prediction_reliability)}
           </div>
         </div>
         <div className="ad-detail-row">
@@ -702,7 +691,6 @@ const PredictForm = () => {
               <th>Prediction</th>
               <th>Confidence</th>
               <th>Applicability domain</th>
-              <th>Reliability</th>
             </tr>
           </thead>
           <tbody>
@@ -712,7 +700,6 @@ const PredictForm = () => {
                 <td>{getPredictionValue(row.prediction)}</td>
                 <td>{formatProbability(row.max_prediction_probability)}</td>
                 <td>{row.ad_status || "N/A"}</td>
-                <td>{renderReliabilityBadge(row.prediction_reliability)}</td>
               </tr>
             ))}
           </tbody>
