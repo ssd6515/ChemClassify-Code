@@ -120,21 +120,21 @@ const AboutModel = () => {
             <div className="prediction-class">
               <div className="class-indicator orange"></div>
               <div className="class-details">
-                <h4>Class 1: Inert Chemicals (Moderately Toxic)</h4>
+                <h4>Class 1: Inert Chemicals</h4>
                 <p>Tend to accumulate in lipids</p>
               </div>
             </div>
             <div className="prediction-class">
               <div className="class-indicator red"></div>
               <div className="class-details">
-                <h4>Class 2: Specifically Bioconcentrating Chemicals (Highly Toxic)</h4>
+                <h4>Class 2: Specifically Bioconcentrating Chemicals</h4>
                 <p>Actively interact with proteins or biological tissues</p>
               </div>
             </div>
             <div className="prediction-class">
               <div className="class-indicator green"></div>
               <div className="class-details">
-                <h4>Class 3: Less Bioconcentrating Chemicals (Least Toxic)</h4>
+                <h4>Class 3: Less Bioconcentrating Chemicals</h4>
                 <p>Are typically metabolized or eliminated from the organism</p>
               </div>
             </div>

@@ -3,7 +3,7 @@ FROM public.ecr.aws/lambda/python:3.12
 
 # Copy your application code into the Lambda task root.
 # AWS Lambda expects the code in ${LAMBDA_TASK_ROOT}
-COPY lambda_single_prediction_no_reliability.py ${LAMBDA_TASK_ROOT}
+COPY lambda_batch_prediction_no_reliability.py ${LAMBDA_TASK_ROOT}
 COPY best_voting_model_panelb_with_AD.pt ${LAMBDA_TASK_ROOT}
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir \
 
 # Specify the Lambda handler in the format: file_name.function_name.
 # Here, it refers to lambda_function.py with the lambda_handler() function.
-CMD ["lambda_single_prediction_no_reliability.lambda_handler"]
+CMD ["lambda_batch_prediction_no_reliability.lambda_handler"]
